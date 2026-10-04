@@ -39,6 +39,7 @@ export function usePersistedSettings({ repository, regions, common, delayMs = 30
       clearTimeout(timer);
       timer = setTimeout(() => { dirty = false; save(); }, delayMs);
     },
+    { deep: true },   // det/filters/read はスナップショットが参照で保持するため、深く追跡しないと変更を検知できない
   );
 
   onUnmounted(() => {

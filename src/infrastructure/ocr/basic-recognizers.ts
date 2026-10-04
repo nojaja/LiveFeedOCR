@@ -45,6 +45,35 @@ export class TesseractRecognizer implements TextRecognizer {
 }
 
 // ----- PaddleOCR.js（ブラウザー内モデル推論。初期化済みインスタンスを共有） -----
+// ORTのセッション設定が公開されていないため、Worker内のonnxruntime警告をラッパーWorkerで握りつぶす。
+// 本体の読み込み完了前に届いたメッセージは取りこぼされるので、バッファして再送する。
+const QUIET_WORKER_SOURCE = (href: string) => `
+const quiet = m => (...a) => { if (typeof a[0] === 'string' && a[0].includes('[W:onnxruntime')) return; m.apply(console, a); };
+console.warn = quiet(console.warn);
+console.error = quiet(console.error);
+const queue = [];
+const buffer = e => queue.push(e);
+self.onmessage = buffer;
+await import(${JSON.stringify(href)});
+const handler = self.onmessage;
+if (handler && handler !== buffer) queue.forEach(e => handler.call(self, e));
+`;
+
+async function withQuietOrtWorker<T>(create: () => Promise<T>): Promise<T> {
+  const NativeWorker = globalThis.Worker;
+  const QuietWorker = function (url: string | URL, options?: WorkerOptions) {
+    const href = new URL(String(url), globalThis.location.href).href;
+    const blobUrl = URL.createObjectURL(new Blob([QUIET_WORKER_SOURCE(href)], { type: 'text/javascript' }));
+    return new NativeWorker(blobUrl, { ...options, type: 'module' });
+  } as unknown as typeof Worker;
+  globalThis.Worker = QuietWorker;
+  try {
+    return await create();
+  } finally {
+    globalThis.Worker = NativeWorker;
+  }
+}
+
 export class PaddleRecognizer implements TextRecognizer {
   private enginePromise: Promise<any> | null = null;
   private report: ProgressReporter;
@@ -54,7 +83,7 @@ export class PaddleRecognizer implements TextRecognizer {
   async recognize(canvas: HTMLCanvasElement): Promise<string> {
     if (!this.enginePromise) {
       this.report('PaddleOCRモデルを準備中...（初回はモデルのダウンロードが必要です）');
-      this.enginePromise = import('@paddleocr/paddleocr-js').then(({ PaddleOCR }) => PaddleOCR.create({
+      this.enginePromise = import('@paddleocr/paddleocr-js').then(({ PaddleOCR }) => withQuietOrtWorker(() => PaddleOCR.create({
         lang: 'japan',
         ocrVersion: 'PP-OCRv5',
         worker: true,
@@ -63,7 +92,7 @@ export class PaddleRecognizer implements TextRecognizer {
           numThreads: 1,
           wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/',
         },
-      })).catch(error => {
+      }))).catch(error => {
         this.enginePromise = null;
         throw error;
       });
