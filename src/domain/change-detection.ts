@@ -32,6 +32,12 @@ export interface Verdict {
   metric?: Metric;
 }
 
+/**
+ * 処理名: 検知状態生成
+ * 処理概要: 変化検知に必要な初期状態を生成する。
+ * 実装理由: 各範囲の判定履歴を分離して保持するため。
+ * @returns 初期化された検知状態
+ */
 export function createDetectionState(): DetectionState {
   return {
     refFrame: null, prevFrame: null, pending: false, lastMotion: 0, rebase: false, accum: null,
@@ -40,6 +46,14 @@ export function createDetectionState(): DetectionState {
 }
 
 // 変化判定の基準を最初から取り直す。silent=true なら読み取りは起動しない
+/**
+ * 処理名: 検知状態リセット
+ * 処理概要: 判定履歴と基準画像状態を初期化する。
+ * 実装理由: 範囲設定変更後に古い判定を引き継がないため。
+ * @param st 対象状態
+ * @param silent 次回発火を抑止するか
+ * @returns 戻り値なし
+ */
 export function resetDetection(st: DetectionState, silent: boolean): void {
   st.refFrame = null;
   st.prevFrame = null;
@@ -53,6 +67,14 @@ export function resetDetection(st: DetectionState, silent: boolean): void {
 }
 
 // 判定用に小さな解像度へ縮小するときのサイズ
+/**
+ * 処理名: サンプル寸法計算
+ * 処理概要: 元画像から比較に適した寸法を求める。
+ * 実装理由: 判定コストと画像比較の安定性を調整するため。
+ * @param sw 元画像幅
+ * @param sh 元画像高さ
+ * @returns 比較用寸法
+ */
 export function sampleSize(sw: number, sh: number): { w: number; h: number } {
   const aspect = sw / sh;
   if (aspect >= 1) return { w: SAMPLE_BASE, h: Math.max(8, Math.round(SAMPLE_BASE / aspect)) };
@@ -60,6 +82,15 @@ export function sampleSize(sw: number, sh: number): { w: number; h: number } {
 }
 
 // 2画像間で「画素の差がしきい値を超えた画素」の割合(%)を返す
+/**
+ * 処理名: 画像差分率計算
+ * 処理概要: 二つのグレー画像の画素差割合を算出する。
+ * 実装理由: 変化検知の判定指標を得るため。
+ * @param a 基準画像
+ * @param b 比較画像
+ * @param pixThr 画素差しきい値
+ * @returns 差分率
+ */
 export function diffRatio(a: GraySample | null, b: GraySample | null, pixThr: number): number {
   if (!a || !b || a.w !== b.w || a.h !== b.h) return 100;
   let count = 0;
@@ -71,6 +102,16 @@ export function diffRatio(a: GraySample | null, b: GraySample | null, pixThr: nu
 }
 
 // 通常の変化検知。「今読み取るべきか」を fire で返す
+/**
+ * 処理名: 変化判定
+ * 処理概要: 画像差分と設定から読み取り発火を判定する。
+ * 実装理由: 自動OCR開始条件を一箇所で管理するため。
+ * @param st 判定状態
+ * @param d 検知設定
+ * @param cur 現在画像
+ * @param now 現在時刻
+ * @returns 判定結果と指標
+ */
 export function judgeChange(st: DetectionState, d: Detection, cur: GraySample, now: number): Verdict {
   if (!st.refFrame) {
     st.refFrame = cur;
@@ -116,6 +157,17 @@ export function judgeChange(st: DetectionState, d: Detection, cur: GraySample, n
 }
 
 // リファレンス一致率モード：条件が「成立した瞬間」に1回だけ fire する
+/**
+ * 処理名: リファレンス画像判定
+ * 処理概要: 現在画像と基準画像の一致状態から発火を判定する。
+ * 実装理由: 画面状態が基準へ戻った際のOCRを実現するため。
+ * @param st 判定状態
+ * @param d リファレンス検知設定
+ * @param cur 現在画像
+ * @param refSample 基準画像
+ * @param now 現在時刻
+ * @returns 判定結果と一致指標
+ */
 export function judgeReference(
   st: DetectionState, d: Detection, cur: GraySample, refSample: GraySample | null, now: number,
 ): Verdict {
@@ -160,3 +212,4 @@ export function judgeReference(
     status: { text: `条件成立。安定待ち... ${Math.max(0, d.stable - waited).toFixed(0)}ms`, color: '#e8590c' },
   };
 }
+

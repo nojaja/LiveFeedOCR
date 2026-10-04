@@ -6,47 +6,101 @@ import {
 import { luma } from '../../domain/image-filter.ts';
 
 // ----- モデルファイルの保存（IndexedDB） -----
+/**
+ * IndexedDBデータベースを開き、必要なオブジェクトストアを用意する。
+ * @returns 開いたデータベース
+ */
 function idbOpen(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open('ocrAppDb', 1);
+    /**
+     * DB更新時にモデルファイル用ストアを作成する。
+     * @returns 戻り値なし
+     */
     r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'role' });
+    /**
+     * DBを開けた結果を解決する。
+     * @returns 戻り値なし
+     */
     r.onsuccess = () => resolve(r.result);
+    /**
+     * DBオープン失敗を呼び出し元へ伝える。
+     * @returns 戻り値なし
+     */
     r.onerror = () => reject(r.error);
   });
 }
 
+/** NDLモデルファイルをIndexedDBへ保存するリポジトリ。 */
 export class NdlFileRepository {
+  /** モデルファイルレコードを保存する。
+   * @param rec 保存レコード
+   * @returns 保存完了までのPromise
+   */
   async put(rec: any): Promise<void> {
     const db = await idbOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('files', 'readwrite');
       tx.objectStore('files').put(rec);
+      /**
+       * トランザクション完了を通知する。
+       * @returns 戻り値なし
+       */
       tx.oncomplete = () => resolve();
+      /**
+       * トランザクション失敗を通知する。
+       * @returns 戻り値なし
+       */
       tx.onerror = () => reject(tx.error);
     });
   }
 
+  /**
+   * 保存済みモデルをすべて読み込む。
+   * @returns モデルレコード一覧
+   */
   async getAll(): Promise<any[]> {
     const db = await idbOpen();
     return new Promise((resolve, reject) => {
       const req = db.transaction('files', 'readonly').objectStore('files').getAll();
+      /**
+       * 読み込み結果を返す。
+       * @returns 戻り値なし
+       */
       req.onsuccess = () => resolve(req.result || []);
+      /**
+       * 読み込み失敗を呼び出し元へ伝える。
+       * @returns 戻り値なし
+       */
       req.onerror = () => reject(req.error);
     });
   }
 
+  /**
+   * 保存済みモデルをすべて削除する。
+   * @returns 削除完了までのPromise
+   */
   async clear(): Promise<void> {
     const db = await idbOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('files', 'readwrite');
       tx.objectStore('files').clear();
+      /**
+       * 削除トランザクション完了を通知する。
+       * @returns 戻り値なし
+       */
       tx.oncomplete = () => resolve();
+      /**
+       * 削除トランザクション失敗を通知する。
+       * @returns 戻り値なし
+       */
       tx.onerror = () => reject(tx.error);
     });
   }
 }
 
 // ----- モデルの状態（読み込み済みファイル・文字セット・推論セッション） -----
+/** NDLモデル、文字セット、推論セッションの状態を保持する。 */
 export class NdlModelStore {
   files: Record<string, any> = {};
   charset: string[] | null = null;
@@ -54,8 +108,15 @@ export class NdlModelStore {
   diag = '';
   private repo: NdlFileRepository;
 
+  /**
+   * @param repo IndexedDBモデルリポジトリ
+   */
   constructor(repo: NdlFileRepository = new NdlFileRepository()) { this.repo = repo; }
 
+  /**
+   * 保存済みモデルと文字セットを読み込み直す。
+   * @returns 非同期処理
+   */
   async reload(): Promise<void> {
     try {
       const all = await this.repo.getAll();
@@ -69,6 +130,11 @@ export class NdlModelStore {
   }
 
   // 選択されたファイルを保存する。使えなかったファイルの理由を返す
+  /**
+   * 選択ファイルを検証してモデルストアへ保存する。
+   * @param files 選択ファイル一覧
+   * @returns 取り込めなかったファイルの理由
+   */
   async importFiles(files: File[]): Promise<string[]> {
     const notes: string[] = [];
     for (const f of files) {
@@ -91,13 +157,25 @@ export class NdlModelStore {
     return notes;
   }
 
+  /**
+   * 保存済みモデルを消去して状態を再読込する。
+   * @returns 非同期処理
+   */
   async clear(): Promise<void> {
     await this.repo.clear();
     await this.reload();
   }
 
+  /** モデルと文字セットの読み込み状態を表示用文字列にする。
+   * @returns 状態説明
+   */
   statusText(): string {
     const f = this.files;
+    /** モデル役割の有無を記号付きで表す。
+     * @param role モデル役割
+     * @param label 表示名
+     * @returns 状態文字列
+     */
     const mark = (role: string, label: string) => `${label}: ${f[role] ? '✔' : '－'}`;
     const cs = this.charset ? `（${this.charset.length}文字）` : '';
     return [mark('parseq30', 'PARSeq-30'), mark('parseq50', 'PARSeq-50'), mark('parseq100', 'PARSeq-100'),
@@ -106,15 +184,25 @@ export class NdlModelStore {
 }
 
 // ----- NDLOCR-Lite（onnxruntime-web）。行分割 → 行ごとに PARSeq で認識 -----
+/** NDLOCR-Liteモデルを使って画像テキストを認識するアダプター。 */
 export class NdlRecognizer implements TextRecognizer {
   private models: NdlModelStore;
   private report: ProgressReporter;
 
+  /**
+   * モデル状態と進捗通知先を設定する。
+   * @param models NDLモデルストア
+   * @param report 進捗通知関数
+   */
   constructor(models: NdlModelStore, report: ProgressReporter) {
     this.models = models;
     this.report = report;
   }
 
+  /** モデル役割に対応する推論セッションを取得または生成する。
+   * @param role PARSeqモデル役割
+   * @returns セッション。モデル未登録ならnull
+   */
   private async getSession(role: NdlRole) {
     const m = this.models;
     if (m.sessions[role]) return m.sessions[role];
@@ -140,6 +228,10 @@ export class NdlRecognizer implements TextRecognizer {
   }
 
   // 画像を文字行ごとのキャンバスに分割する（見つからなければ画像全体）
+  /** 画像を検出行ごとのCanvasへ分割する。
+   * @param canvas 入力画像
+   * @returns 行画像一覧
+   */
   private segmentLines(canvas: HTMLCanvasElement): HTMLCanvasElement[] {
     const w = canvas.width, h = canvas.height;
     const px = canvas.getContext('2d')!.getImageData(0, 0, w, h).data;
@@ -156,6 +248,10 @@ export class NdlRecognizer implements TextRecognizer {
     return lines.length ? lines : [canvas];
   }
 
+  /** 一つの行画像をPARSeqモデルで認識する。
+   * @param lineCanvas 行画像
+   * @returns 認識テキスト
+   */
   private async recognizeLine(lineCanvas: HTMLCanvasElement): Promise<string> {
     const m = this.models;
     const role = modelPreference(lineCanvas.width, lineCanvas.height).find(r => m.files[r]);
@@ -191,6 +287,10 @@ export class NdlRecognizer implements TextRecognizer {
     return decodeLogits(out.data, T, C, cs);
   }
 
+  /** 行分割後の画像をNDLOCR-Liteで認識し、結果を連結する。
+   * @param canvas 認識画像
+   * @returns 認識テキスト
+   */
   async recognize(canvas: HTMLCanvasElement): Promise<string> {
     const m = this.models;
     if (!m.charset || m.charset.length === 0) {

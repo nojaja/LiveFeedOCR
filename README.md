@@ -23,8 +23,13 @@ PaddleOCR.js SDKはApache-2.0で公開されています。依存パッケージ
 ## 開発とテスト
 
 - `npm test` — 自動テスト
+- `npm run test:ci` — CI用テストとcoverage（50%以上）
 - `npm run build` — 本番ビルド
+- `npm run type-check` — Vue単一ファイルコンポーネントを含む型チェック
+- `npm run lint` — ESLint
+- `npm run depcruise` — 依存関係検査
+- `npm run cpd` — コード重複検査
+- `npm run docs` — APIドキュメント生成
 
 画面はVue 3の `src/App.vue` を `src/html/main.ts` からマウントします。Canvas描画・OCR処理は画面マウント後に起動し、画面破棄時には監視処理とカメラを停止します。スタイルは `src/styles/main.css` にまとめています。
 
-- `npm run typecheck` — Vue単一ファイルコンポーネントを含む型チェック

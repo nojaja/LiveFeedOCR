@@ -8,10 +8,28 @@ export interface AccumState {
 
 export interface AccumHolder { accum: AccumState | null }
 
+/**
+ * 処理名: 輝度計算
+ * 処理概要: RGB値を標準的な輝度値へ変換する。
+ * 実装理由: 色情報を明るさ基準の画像処理へ利用するため。
+ * @param r 赤成分
+ * @param g 緑成分
+ * @param b 青成分
+ * @returns 輝度値
+ */
 export function luma(r: number, g: number, b: number): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
+/**
+ * 処理名: グレースケール変換
+ * 処理概要: RGBA配列を輝度のグレースケール画像にする。
+ * 実装理由: 変化検知の画素比較を効率化するため。
+ * @param px RGBA画素配列
+ * @param w 画像幅
+ * @param h 画像高さ
+ * @returns グレースケール画像と寸法
+ */
 export function toGray(px: ArrayLike<number>, w: number, h: number): GraySample {
   const gray = new Uint8Array(w * h);
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
@@ -20,33 +38,57 @@ export function toGray(px: ArrayLike<number>, w: number, h: number): GraySample 
   return { gray, w, h };
 }
 
-// RGBAのピクセル配列にフィルタ設定をその場で適用する
+/**
+ * 処理名: 画像フィルタ適用
+ * 処理概要: グレースケール化、二値化、反転を画素へ適用する。
+ * 実装理由: OCR入力画像を設定に合わせて前処理するため。
+ * @param data RGBA画素配列
+ * @param f フィルタ設定
+ * @returns 戻り値なし。配列を直接更新する
+ */
 export function filterImageData(data: Uint8ClampedArray | Uint8Array, f: Filters): void {
   for (let i = 0; i < data.length; i += 4) {
-    let r = data[i];
-    let g = data[i + 1];
-    let b = data[i + 2];
-
-    if (f.gray || f.bin) {
-      r = g = b = luma(r, g, b);
-    }
-    if (f.bin) {
-      r = g = b = r >= f.thr ? 255 : 0;
-    }
-    if (f.inv) {
-      r = 255 - r;
-      g = 255 - g;
-      b = 255 - b;
-    }
-    data[i] = r;
-    data[i + 1] = g;
-    data[i + 2] = b;
+    applyPixelFilter(data, i, f);
   }
 }
 
-// 直近Nフレームの2値画像(0/255)を重ねて1枚にする
-//  or : 1枚でも白なら白（加算）
-//  and: 全フレームで白のときだけ白（減算）
+/**
+ * 処理名: 単一画素フィルタ
+ * 処理概要: 指定画素へグレースケール、二値化、反転を適用する。
+ * 実装理由: 画素処理の条件分岐を独立させるため。
+ * @param data RGBA画素配列
+ * @param index 対象画素の先頭インデックス
+ * @param filters フィルタ設定
+ * @returns 戻り値なし。配列を直接更新する
+ */
+function applyPixelFilter(data: Uint8ClampedArray | Uint8Array, index: number, filters: Filters): void {
+  let red = data[index];
+  let green = data[index + 1];
+  let blue = data[index + 2];
+  if (filters.gray || filters.bin) red = green = blue = luma(red, green, blue);
+  if (filters.bin) red = green = blue = red >= filters.thr ? 255 : 0;
+  if (filters.inv) {
+    red = 255 - red;
+    green = 255 - green;
+    blue = 255 - blue;
+  }
+  data[index] = red;
+  data[index + 1] = green;
+  data[index + 2] = blue;
+}
+
+/**
+ * 処理名: フレーム累積
+ * 処理概要: 直近フレームをORまたはAND条件で合成する。
+ * 実装理由: 複数フレームから文字の安定した画素を抽出するため。
+ * @param holder 前回までの累積状態
+ * @param bits 今回の二値画像
+ * @param w 画像幅
+ * @param h 画像高さ
+ * @param n 保持するフレーム数
+ * @param mode 合成モード
+ * @returns 合成後の二値画像
+ */
 export function accumulate(holder: AccumHolder, bits: Uint8Array, w: number, h: number, n: number, mode: string): Uint8Array {
   let a = holder.accum;
   if (!a || a.w !== w || a.h !== h || a.n !== n || a.mode !== mode) {
@@ -54,29 +96,62 @@ export function accumulate(holder: AccumHolder, bits: Uint8Array, w: number, h: 
   }
   a.frames.push(bits);
   while (a.frames.length > n) a.frames.shift();
-
   const len = w * h;
   const out = new Uint8Array(len);
-  if (mode === 'or') {
-    for (const f of a.frames) {
-      for (let i = 0; i < len; i++) if (f[i]) out[i] = 255;
-    }
-  } else {
-    out.fill(255);
-    for (const f of a.frames) {
-      for (let i = 0; i < len; i++) if (!f[i]) out[i] = 0;
-    }
-  }
+  if (mode === 'or') combineAnyFrame(a.frames, out);
+  else combineAllFrames(a.frames, out);
   return out;
 }
 
+/** OR合成で、いずれかのフレームにある白画素を出力へ反映する。
+ * @param frames 累積対象フレーム
+ * @param output 合成先配列
+ * @returns 戻り値なし。outputを更新する
+ */
+function combineAnyFrame(frames: Uint8Array[], output: Uint8Array): void {
+  for (const frame of frames) {
+    for (let index = 0; index < output.length; index++) if (frame[index]) output[index] = 255;
+  }
+}
+
+/** AND合成で、全フレームにある白画素のみを出力へ残す。
+ * @param frames 累積対象フレーム
+ * @param output 合成先配列
+ * @returns 戻り値なし。outputを更新する
+ */
+function combineAllFrames(frames: Uint8Array[], output: Uint8Array): void {
+  output.fill(255);
+  for (const frame of frames) {
+    for (let index = 0; index < output.length; index++) if (!frame[index]) output[index] = 0;
+  }
+}
+
+/**
+ * 処理名: 二値画像生成
+ * 処理概要: 輝度をしきい値と比較して0または255へ変換する。
+ * 実装理由: フレーム累積に使う二値表現を作るため。
+ * @param gray 輝度配列
+ * @param thr 二値化しきい値
+ * @returns 二値画素配列
+ */
 export function thresholdBits(gray: ArrayLike<number>, thr: number): Uint8Array {
   const bits = new Uint8Array(gray.length);
   for (let i = 0; i < bits.length; i++) bits[i] = gray[i] >= thr ? 255 : 0;
   return bits;
 }
 
-// ビット加算/減算モード：二値化 → 重ね合わせ → 結果でピクセルを置き換える
+/**
+ * 処理名: 累積画像フィルタ
+ * 処理概要: 二値化、フレーム合成、反転を行い画素配列へ反映する。
+ * 実装理由: 設定された累積モードをOCR前処理へ適用するため。
+ * @param data RGBA画素配列
+ * @param w 画像幅
+ * @param h 画像高さ
+ * @param f フィルタ設定
+ * @param d 累積設定
+ * @param holder 累積状態
+ * @returns 戻り値なし。配列を直接更新する
+ */
 export function accumulateImage(
   data: Uint8ClampedArray | Uint8Array, w: number, h: number,
   f: Filters, d: Pick<Detection, 'accumN' | 'accumMode'>, holder: AccumHolder,
@@ -94,7 +169,18 @@ export function accumulateImage(
   }
 }
 
-// 範囲の検出モードに応じた前処理を適用する
+/**
+ * 処理名: 範囲フィルタ選択
+ * 処理概要: 検出モードに適した前処理を適用する。
+ * 実装理由: 単純フィルタと累積フィルタの適用経路を統一するため。
+ * @param data RGBA画素配列
+ * @param w 画像幅
+ * @param h 画像高さ
+ * @param f フィルタ設定
+ * @param d 検出設定
+ * @param holder 累積状態
+ * @returns 戻り値なし。配列を直接更新する
+ */
 export function applyRegionFilter(
   data: Uint8ClampedArray | Uint8Array, w: number, h: number,
   f: Filters, d: Detection, holder: AccumHolder,

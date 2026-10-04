@@ -4,6 +4,7 @@ import { angleRad, type DetectRegion, type OcrRegion } from '../../domain/region
 import type { ImageSurface, RegionImageSource } from '../../application/ports.ts';
 
 // 範囲ごとに持つキャンバス資源（保存しない実行時の状態）
+/** 範囲固有の描画用Canvasとリファレンス画像キャッシュを保持する。 */
 export class RegionSurface {
   cropCanvas: HTMLCanvasElement | null = null;
   cropCtx: CanvasRenderingContext2D | null = null;
@@ -15,6 +16,10 @@ export class RegionSurface {
   refImgReady = false;
   refCache: GraySample | null = null;
 
+  /**
+   * プレビューが必要なOCR範囲向けのCanvas資源を初期化する。
+   * @param withPreview プレビューCanvasを作るか
+   */
   constructor(withPreview: boolean) {
     if (withPreview) {
       const canvas = document.createElement('canvas');
@@ -29,7 +34,22 @@ export class RegionSurface {
 
 export interface RegionRuntime { detection: DetectionState; surface: RegionSurface }
 type WithRuntime<T> = T & { rt: RegionRuntime };
+type WithPreviewRuntime = WithRuntime<OcrRegion> & { ui: { previewW: number } };
 
+/** Canvas画像ソースのプレビュー通知コールバック型を保持する。 */
+class CanvasSourceCallbackSignature {
+  /**
+   * 更新済みプレビューを外部へ通知する。
+   * @param reg OCR範囲
+   * @param canvas 更新画像
+   * @returns 戻り値なし
+   */
+  static previewUpdated(reg: WithPreviewRuntime, canvas: HTMLCanvasElement): void { void reg; void canvas; }
+}
+
+/** 読み取り頻度を考慮した2D Canvasと描画コンテキストを作成する。
+ * @returns Canvas要素と描画コンテキスト
+ */
 function create2d(): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas');
   return [canvas, canvas.getContext('2d', { willReadFrequently: true })!];
@@ -37,22 +57,30 @@ function create2d(): [HTMLCanvasElement, CanvasRenderingContext2D] {
 
 export interface CanvasSourceOptions {
   getVideo: () => HTMLVideoElement | null;
-  onPreviewUpdated?: (reg: any, canvas: HTMLCanvasElement) => void;
+  onPreviewUpdated?: typeof CanvasSourceCallbackSignature.previewUpdated;
 }
 
 // 映像(video)から範囲の画像を切り出し・加工・縮小サンプリングする
+/** video映像から各範囲の切り出し、加工、判定画像生成を行うアダプター。 */
 export class CanvasRegionImageSource
-  implements RegionImageSource<WithRuntime<OcrRegion>, WithRuntime<DetectRegion>> {
+  implements RegionImageSource<WithPreviewRuntime, WithRuntime<DetectRegion>> {
   private getVideo: () => HTMLVideoElement | null;
-  private onPreviewUpdated?: (reg: any, canvas: HTMLCanvasElement) => void;
+  private onPreviewUpdated?: typeof CanvasSourceCallbackSignature.previewUpdated;
   private sample = create2d();
   private ref = create2d();
 
+  /**
+   * 映像取得元とプレビュー更新通知を設定する。
+   * @param options Canvas画像ソースの依存
+   */
   constructor(options: CanvasSourceOptions) {
     this.getVideo = options.getVideo;
     this.onPreviewUpdated = options.onPreviewUpdated;
   }
 
+  /** 映像要素と再生準備状態を検証する。
+   * @returns 問題があれば理由、正常なら空文字列
+   */
   videoError(): string {
     const video = this.getVideo();
     if (!video) return '映像要素が未準備です';
@@ -62,7 +90,11 @@ export class CanvasRegionImageSource
   }
 
   // OCR範囲(回転した矩形)の中身を、水平になるよう補正して範囲ごとのキャンバスに描く
-  private captureCrop(reg: WithRuntime<OcrRegion>): HTMLCanvasElement | null {
+  /** OCR範囲を水平に補正して切り出す。
+   * @param reg OCR範囲
+   * @returns 切り出しCanvas。映像未準備ならnull
+   */
+  private captureCrop(reg: WithPreviewRuntime): HTMLCanvasElement | null {
     if (this.videoError()) return null;
     const video = this.getVideo()!;
     const s = reg.rt.surface;
@@ -88,7 +120,11 @@ export class CanvasRegionImageSource
     return cc;
   }
 
-  refreshPreview(reg: WithRuntime<OcrRegion>): boolean {
+  /** フィルター適用済みOCRプレビューを描画する。
+   * @param reg OCR範囲
+   * @returns 更新できた場合true
+   */
+  refreshPreview(reg: WithPreviewRuntime): boolean {
     const crop = this.captureCrop(reg);
     const s = reg.rt.surface;
     if (!crop || !s.previewCanvas) return false;
@@ -107,14 +143,33 @@ export class CanvasRegionImageSource
     return true;
   }
 
-  previewReady(reg: WithRuntime<OcrRegion>): boolean { return reg.rt.surface.previewReady; }
+  /**
+   * OCRプレビュー画像が利用可能かを返す。
+   * @param reg OCR範囲
+   * @returns 利用可能ならtrue
+   */
+  previewReady(reg: WithPreviewRuntime): boolean { return reg.rt.surface.previewReady; }
 
-  previewSurface(reg: WithRuntime<OcrRegion>): ImageSurface { return reg.rt.surface.previewCanvas!; }
+  /**
+   * OCR認識に使う加工済みプレビューを返す。
+   * @param reg OCR範囲
+   * @returns プレビュー画像
+   */
+  previewSurface(reg: WithPreviewRuntime): ImageSurface { return reg.rt.surface.previewCanvas!; }
 
-  fallbackSurface(reg: WithRuntime<OcrRegion>): ImageSurface | null { return reg.rt.surface.cropCanvas; }
+  /**
+   * 加工前切り出し画像をフォールバックとして返す。
+   * @param reg OCR範囲
+   * @returns 画像。未作成ならnull
+   */
+  fallbackSurface(reg: WithPreviewRuntime): ImageSurface | null { return reg.rt.surface.cropCanvas; }
 
   // 切り取りプレビュー(フィルタ/加算・減算後)の画像を縮小して判定用データにする
-  samplePreview(reg: WithRuntime<OcrRegion>): GraySample {
+  /** プレビュー画像を小さなグレースケール判定画像へ変換する。
+   * @param reg OCR範囲
+   * @returns 判定用画像
+   */
+  samplePreview(reg: WithPreviewRuntime): GraySample {
     const pc = reg.rt.surface.previewCanvas!;
     const [canvas, ctx] = this.sample;
     const { w, h } = sampleSize(pc.width, pc.height);
@@ -125,6 +180,10 @@ export class CanvasRegionImageSource
   }
 
   // 変化検知範囲：映像の該当部分を縮小してグレースケール化
+  /** 検知範囲をグレースケール判定画像としてサンプリングする。
+   * @param det 検知範囲
+   * @returns 判定用画像
+   */
   sampleDetect(det: WithRuntime<DetectRegion>): GraySample {
     const video = this.getVideo()!;
     const vw = video.videoWidth, vh = video.videoHeight;
@@ -140,6 +199,12 @@ export class CanvasRegionImageSource
   }
 
   // リファレンス画像を、判定画像と同じサイズのグレースケール配列にして返す（未設定/読込中は null）
+  /** 基準画像を指定寸法のグレースケールへ変換して返す。
+   * @param det 検知範囲
+   * @param w 出力幅
+   * @param h 出力高さ
+   * @returns 基準画像。未設定または読込中ならnull
+   */
   referenceSample(det: WithRuntime<DetectRegion>, w: number, h: number): GraySample | null {
     const s = det.rt.surface, src = det.det.refImage;
     if (!src) return null;
@@ -148,6 +213,9 @@ export class CanvasRegionImageSource
       s.refImgReady = false;
       s.refCache = null;
       const img = new Image();
+      /** 読み込み完了した基準画像をキャッシュ状態へ保存する。
+       * @returns 戻り値なし
+       */
       img.onload = () => { s.refImg = img; s.refImgReady = true; };
       img.src = src;
     }
@@ -162,7 +230,11 @@ export class CanvasRegionImageSource
     return s.refCache;
   }
 
-  // 現在の変化検知範囲の画像をグレースケールPNG(dataURL)として取り出す
+  /**
+   * 現在の検知範囲画像をグレースケールPNG data URLにする。
+   * @param det 検知範囲
+   * @returns PNG data URL
+   */
   captureReferenceImage(det: WithRuntime<DetectRegion>): string {
     const s = this.sampleDetect(det);
     const c = document.createElement('canvas');

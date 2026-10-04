@@ -2,12 +2,17 @@
   "name": "live-feed-ocr",
   "version": "0.0.11",
   "private": true,
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "dev": "vite --config vite.config.js src/html --host 0.0.0.0",
     "build": "vite build src/html --config vite.config.js --outDir ../../dist",
-    "test": "node --test --experimental-strip-types",
-    "typecheck": "vue-tsc --noEmit"
+    "test": "node --test --experimental-strip-types tests/zoom.test.js tests/paddleocr-provider.test.js tests/spec/behavior/v0.0.10/styles-migration.test.js tests/spec/behavior/v0.0.11/vue-screen.test.js tests/spec/behavior/v0.0.12/clean-architecture.test.js",
+    "test:ci": "npm test && jest --config=jest.unit.config.js --coverage",
+    "type-check": "vue-tsc --noEmit",
+    "lint": "eslint src",
+    "depcruise": "depcruise --config .dependency-cruiser.js src",
+    "cpd": "jscpd src --min-lines 5 --min-tokens 50 --threshold 0",
+    "docs": "typedoc --options typedoc.js"
   },
   "dependencies": {
     "@paddleocr/paddleocr-js": "0.4.2",
@@ -15,9 +20,24 @@
     "vue": "^3.5.43"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
     "@vitejs/plugin-vue": "^5.2.4",
+    "cross-env": "^10.1.0",
+    "dependency-cruiser": "^18.5.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-jsdoc": "^63.3.3",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "eslint-plugin-vue": "^10.11.1",
+    "jest": "^30.5.2",
+    "jscpd": "^5.4.0",
+    "ts-jest": "^29.4.14",
+    "typedoc": "^0.28.20",
+    "typedoc-plugin-markdown": "^4.13.1",
     "typescript": "^5.9.2",
+    "typescript-eslint": "^8.71.0",
     "vite": "^6.4.3",
+    "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^2.2.12"
   }
 }

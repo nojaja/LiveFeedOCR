@@ -1,12 +1,18 @@
-import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
+const { defineConfig } = require('vite');
+const vue = require('@vitejs/plugin-vue');
 
-const workspaceRoot = fileURLToPath(new URL('.', import.meta.url));
+const workspaceRoot = __dirname;
 
-export default defineConfig({
+module.exports = defineConfig({
   base: './',
   plugins: [vue()],
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: 'index.bundle.js',
+      },
+    },
+  },
   server: {
     fs: {
       allow: [workspaceRoot],

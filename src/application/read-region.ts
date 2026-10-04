@@ -22,7 +22,15 @@ export interface ReadInput {
   fallback: ImageSurface | null;
 }
 
-// 範囲の読み取り設定に従って、QRコードまたはOCRで文字列を取り出す
+/**
+ * 処理名: 領域読み取り
+ * 処理概要: OCRまたはQRの設定に応じて画像を読み取り、結果を整える。
+ * 実装理由: 認識エンジン選択と後処理を画面層から分離するため。
+ * @param region 読み取り対象と設定
+ * @param input 入力画像
+ * @param deps 認識器とQR読み取り器
+ * @returns 認識結果
+ */
 export async function readRegion(
   region: Pick<OcrRegion, 'read'>, input: ReadInput, deps: ReadDeps,
 ): Promise<ReadOutcome> {

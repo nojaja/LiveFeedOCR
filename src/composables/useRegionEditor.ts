@@ -9,6 +9,23 @@ import type { Dialogs } from '../application/ports.ts';
 import type { OcrView, RegionView, RegionsStore } from './useRegions.ts';
 import type { CaptureViewport } from './useCaptureViewport.ts';
 
+/** 領域エディターコールバックの正確な型を保持する。 */
+class RegionEditorCallbackSignatures {
+  /**
+   * 範囲形状変更を通知する。
+   * @param reg OCR範囲
+   * @returns 戻り値なし
+   */
+  static geometryChanged(reg: OcrView): void { void reg; }
+
+  /**
+   * 範囲形状確定を通知する。
+   * @param item 編集対象範囲
+   * @returns 戻り値なし
+   */
+  static geometryCommitted(item: RegionView): void { void item; }
+}
+
 export type DrawMode = 'ocr' | 'detect' | 'edit';
 
 export interface RegionEditorOptions {
@@ -18,11 +35,18 @@ export interface RegionEditorOptions {
   video: Ref<HTMLVideoElement | null>;
   overlay: Ref<HTMLCanvasElement | null>;
   dialogs: Dialogs;
-  onGeometryChanged: (reg: OcrView) => void;
-  onGeometryCommitted: (item: RegionView) => void;
+  onGeometryChanged: typeof RegionEditorCallbackSignatures.geometryChanged;
+  onGeometryCommitted: typeof RegionEditorCallbackSignatures.geometryCommitted;
 }
 
 // オーバーレイ上での範囲の描画・移動・リサイズ
+/**
+ * 処理名: 範囲エディター管理
+ * 処理概要: ポインター入力で範囲を描画、移動、リサイズする。
+ * 実装理由: Canvasオーバーレイの編集状態をComposableへ集約するため。
+ * @param opts 範囲、表示要素、操作ポート
+ * @returns 編集状態と操作ハンドラー
+ */
 export function useRegionEditor(opts: RegionEditorOptions) {
   const { regions, viewport, wrapper, video, overlay, dialogs } = opts;
   const drawMode = ref<DrawMode>('ocr');
@@ -32,8 +56,16 @@ export function useRegionEditor(opts: RegionEditorOptions) {
   const drag = shallowRef<DragState | null>(null);
   let resizeObserver: ResizeObserver | null = null;
 
+  /**
+   * オーバーレイのピクセル寸法を返す。
+   * @returns 現在の幅と高さ
+   */
   const size = () => ({ width: overlay.value?.width || 0, height: overlay.value?.height || 0 });
 
+  /**
+   * 表示コンテナーに合わせてCanvas寸法を更新する。
+   * @returns 戻り値なし
+   */
   function resizeOverlay() {
     const host = wrapper.value, o = overlay.value;
     if (!host || !o) return;
@@ -63,6 +95,11 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     });
   }, { flush: 'post' });
 
+  /**
+   * 編集対象に合わせてカーソルを選択する。
+   * @param p ポインター座標
+   * @returns 戻り値なし
+   */
   function updateCursor(p: Point | null) {
     if (drawMode.value !== 'edit') { cursor.value = 'crosshair'; return; }
     const hit = p ? hitTest(regions.allItems(), p, size()) : null;
@@ -70,11 +107,21 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     cursor.value = hit.handle ? resizeCursor(hit.handle, angleRad(hit.item)) : 'move';
   }
 
+  /**
+   * 描画・編集モードを変更する。
+   * @param mode 新しいモード
+   * @returns 戻り値なし
+   */
   function setDrawMode(mode: DrawMode) {
     drawMode.value = mode;
     updateCursor(null);
   }
 
+  /**
+   * ポインター押下からパン、編集、描画を開始する。
+   * @param e ポインターイベント
+   * @returns 戻り値なし
+   */
   function onPointerDown(e: PointerEvent) {
     if (viewport.beginPan(e)) return;
     const p = viewport.toContentPoint(e.clientX, e.clientY);
@@ -93,6 +140,11 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     draft.value = { startX: p.x, startY: p.y, curX: p.x, curY: p.y, mode: drawMode.value };
   }
 
+  /**
+   * ポインター移動に応じてパン、範囲編集、描画枠を更新する。
+   * @param e ポインターイベント
+   * @returns 戻り値なし
+   */
   function onPointerMove(e: PointerEvent) {
     if (viewport.movePan(e)) return;
     const p = viewport.toContentPoint(e.clientX, e.clientY);
@@ -102,6 +154,12 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     draft.value = { ...draft.value, curX: p.x, curY: p.y };
   }
 
+  /**
+   * ドラッグ中の範囲矩形を更新する。
+   * @param d ドラッグ状態
+   * @param p 現在座標
+   * @returns 戻り値なし
+   */
   function applyDrag(d: DragState, p: Point) {
     const it = d.item as RegionView;
     Object.assign(it, computeDragRect(d, p, size()));
@@ -111,6 +169,10 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     }
   }
 
+  /**
+   * 範囲ドラッグを確定して検知基準をリセットする。
+   * @returns 戻り値なし
+   */
   function endDrag() {
     const d = drag.value;
     drag.value = null;
@@ -119,6 +181,10 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     opts.onGeometryCommitted(d.item as RegionView);
   }
 
+  /**
+   * 描画枠を検証しOCRまたは検知範囲として登録する。
+   * @returns 戻り値なし
+   */
   function finishDrawing() {
     const d = draft.value;
     draft.value = null;
@@ -133,12 +199,21 @@ export function useRegionEditor(opts: RegionEditorOptions) {
     }
   }
 
-  function onPointerUp(e: PointerEvent) {
+  /**
+   * ポインター解放時に現在の操作を確定する。
+   * @param e ポインターイベント
+   * @returns 戻り値なし
+   */
+  function onPointerUp() {
     if (viewport.endPan()) return;
     if (drag.value) endDrag();
     else finishDrawing();
   }
 
+  /**
+   * キャンセルされたドラッグ状態を解除する。
+   * @returns 戻り値なし
+   */
   function onPointerCancel() {
     if (viewport.endPan()) return;
     if (drag.value) endDrag();
@@ -162,7 +237,13 @@ export function useRegionEditor(opts: RegionEditorOptions) {
   });
 
   return {
-    drawMode, cursor, dragging: () => !!drag.value, setDrawMode,
+    drawMode, cursor,
+    /**
+     * 範囲編集ドラッグの実行状態を返す。
+     * @returns ドラッグ中ならtrue
+     */
+    dragging: () => !!drag.value,
+    setDrawMode,
     onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
   };
 }

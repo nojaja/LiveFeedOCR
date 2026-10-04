@@ -1,0 +1,40 @@
+[**live-feed-ocr**](README.md)
+
+***
+
+# live-feed-ocr
+
+## Modules
+
+- [application/job-queue](application/job-queue/README.md)
+- [application/monitor](application/monitor/README.md)
+- [application/ports](application/ports/README.md)
+- [application/read-region](application/read-region/README.md)
+- [application/repositories](application/repositories/README.md)
+- [composables/useCamera](composables/useCamera/README.md)
+- [composables/useCaptureViewport](composables/useCaptureViewport/README.md)
+- [composables/useControlKey](composables/useControlKey/README.md)
+- [composables/useMonitor](composables/useMonitor/README.md)
+- [composables/useNdlModels](composables/useNdlModels/README.md)
+- [composables/useOcrLog](composables/useOcrLog/README.md)
+- [composables/useOcrRunner](composables/useOcrRunner/README.md)
+- [composables/usePersistedSettings](composables/usePersistedSettings/README.md)
+- [composables/usePreviewViewport](composables/usePreviewViewport/README.md)
+- [composables/useRegionEditor](composables/useRegionEditor/README.md)
+- [composables/useRegions](composables/useRegions/README.md)
+- [composables/useRegionSets](composables/useRegionSets/README.md)
+- [composables/useWorkspace](composables/useWorkspace/README.md)
+- [domain/change-detection](domain/change-detection/README.md)
+- [domain/geometry](domain/geometry/README.md)
+- [domain/image-filter](domain/image-filter/README.md)
+- [domain/ndl-text](domain/ndl-text/README.md)
+- [domain/region](domain/region/README.md)
+- [domain/result-log](domain/result-log/README.md)
+- [domain/zoom](domain/zoom/README.md)
+- [env](env/README.md)
+- [html/main](html/main/README.md)
+- [infrastructure/browser/browser-services](infrastructure/browser/browser-services/README.md)
+- [infrastructure/canvas/canvas-image-source](infrastructure/canvas/canvas-image-source/README.md)
+- [infrastructure/canvas/overlay-renderer](infrastructure/canvas/overlay-renderer/README.md)
+- [infrastructure/ocr/basic-recognizers](infrastructure/ocr/basic-recognizers/README.md)
+- [infrastructure/ocr/ndl-recognizer](infrastructure/ocr/ndl-recognizer/README.md)

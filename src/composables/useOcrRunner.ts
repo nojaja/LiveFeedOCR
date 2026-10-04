@@ -1,6 +1,6 @@
 import { JobQueue } from '../application/job-queue.ts';
 import { readRegion, type ReadDeps } from '../application/read-region.ts';
-import type { RegionImageSource } from '../application/ports.ts';
+import type { ProgressReporter, RegionImageSource } from '../application/ports.ts';
 import type { OcrLog } from './useOcrLog.ts';
 import type { OcrView, RegionsStore } from './useRegions.ts';
 
@@ -9,13 +9,35 @@ export interface OcrRunnerDeps {
   source: RegionImageSource<OcrView, any>;
   read: ReadDeps;
   log: OcrLog;
-  report: (message: string) => void;
+  report: ProgressReporter;
 }
 
 // 読み取りの待ち行列（範囲ごとに順番に実行）と、結果のログ記録
+/**
+ * 処理名: OCRジョブ実行管理
+ * 処理概要: 範囲ごとにOCRを逐次実行し、進捗と結果を記録する。
+ * 実装理由: エンジン競合を避け、結果処理を一箇所へ集約するため。
+ * @param root0 依存関係一式
+ * @param root0.regions 範囲ストア
+ * @param root0.source 画像取得元
+ * @param root0.read 読み取りユースケース依存
+ * @param root0.log 結果ログ操作
+ * @param root0.report 進捗通知
+ * @returns ジョブ投入・消去操作
+ */
 export function useOcrRunner({ regions, source, read, log, report }: OcrRunnerDeps) {
+  /** IDから現在存在するOCR範囲を検索する。
+  * @param id 範囲ID
+   * @returns 範囲。存在しなければundefined
+   */
   const find = (id: number) => regions.ocrRegions.value.find(r => r.id === id);
 
+  /** OCRジョブを処理して範囲状態とログを更新する。
+  * @param root0 ジョブ情報
+  * @param root0.key 範囲ID
+  * @param root0.reason 実行理由
+   * @returns 非同期処理
+   */
   async function runJob({ key, reason }: { key: number; reason: string }) {
     const reg = find(key);
     if (!reg) return;
@@ -57,7 +79,15 @@ export function useOcrRunner({ regions, source, read, log, report }: OcrRunnerDe
   );
 
   return {
+    /** 読み取りジョブをキューへ登録する。
+     * @param reg OCR範囲
+     * @param reason 実行理由
+     * @returns 登録できた場合true
+     */
     enqueue: (reg: OcrView, reason: string) => queue.enqueue(reg.id, reason),
+    /** 待機中のOCRジョブを消去する。
+     * @returns 戻り値なし
+     */
     clearQueue: () => queue.clear(),
   };
 }

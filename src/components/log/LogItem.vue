@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { describeLogEntry, type LogEntry } from '../../domain/result-log.ts';
+import type { ClipboardWriter } from '../../application/ports.ts';
 
-const props = defineProps<{ entry: LogEntry; copyText: (text: string) => Promise<void> }>();
+const props = defineProps<{ entry: LogEntry; copyText: ClipboardWriter }>();
 defineEmits<{ remove: [id: string] }>();
 
 const copyLabel = ref('コピー');
