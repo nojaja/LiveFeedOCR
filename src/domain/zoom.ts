@@ -1,14 +1,23 @@
 export const MIN_ZOOM = 0.5;
 export const MAX_ZOOM = 4;
 export const ZOOM_FACTOR = 1.1;
+export const PAN_THRESHOLD = 1.001;
 
-export function adjustZoom(current, deltaY, min = MIN_ZOOM, max = MAX_ZOOM) {
-  if (!Number.isFinite(current) || !Number.isFinite(deltaY)) return 1;
-  const next = current * (deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR);
-  return Math.min(max, Math.max(min, next));
+export interface Bounds { left: number; top: number; width: number; height: number }
+
+export function clampZoom(zoom: number, min = MIN_ZOOM, max = MAX_ZOOM): number {
+  return Math.min(max, Math.max(min, zoom));
 }
 
-export function mapPointToZoomedContent(clientX, clientY, bounds, zoom, panX = 0, panY = 0) {
+export function adjustZoom(current: number, deltaY: number, min = MIN_ZOOM, max = MAX_ZOOM): number {
+  if (!Number.isFinite(current) || !Number.isFinite(deltaY)) return 1;
+  const next = current * (deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR);
+  return clampZoom(next, min, max);
+}
+
+export function mapPointToZoomedContent(
+  clientX: number, clientY: number, bounds: Bounds, zoom: number, panX = 0, panY = 0,
+) {
   const x = (clientX - bounds.left - bounds.width * (1 - zoom) / 2 - panX) / zoom;
   const y = (clientY - bounds.top - bounds.height * (1 - zoom) / 2 - panY) / zoom;
   return {
@@ -17,7 +26,7 @@ export function mapPointToZoomedContent(clientX, clientY, bounds, zoom, panX = 0
   };
 }
 
-export function clampPanOffset(viewportSize, contentSize, zoom, offset) {
+export function clampPanOffset(viewportSize: number, contentSize: number, zoom: number, offset: number): number {
   if (![viewportSize, contentSize, zoom, offset].every(Number.isFinite) || viewportSize <= 0 || contentSize <= 0 || zoom <= 0) return 0;
   if (contentSize * zoom <= viewportSize) return 0;
   const minOffset = viewportSize - contentSize * (1 + zoom) / 2;

@@ -17,6 +17,6 @@ test('HTMLはインラインCSSを持たず、Viteエントリーからsrc/style
 });
 
 test('JavaScriptが生成するUIテンプレートにインラインstyle属性を含めない', async () => {
-  const script = await readProjectFile('src/js/script.ts');
+  const script = await readProjectFile('src/App.vue');
   assert.doesNotMatch(script, /\sstyle\s*=/i);
 });

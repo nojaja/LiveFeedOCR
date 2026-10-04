@@ -1,7 +1,18 @@
 <script setup lang="ts">
-import { useScreenController } from './use-screen-controller';
+import { createWorkspace, provideWorkspace } from './composables/useWorkspace.ts';
+import CaptureView from './components/CaptureView.vue';
+import CommonSettingsPanel from './components/CommonSettingsPanel.vue';
+import DetectRegionCard from './components/DetectRegionCard.vue';
+import DrawModePanel from './components/DrawModePanel.vue';
+import NdlModelPanel from './components/NdlModelPanel.vue';
+import OcrLogPanel from './components/OcrLogPanel.vue';
+import OcrRegionCard from './components/OcrRegionCard.vue';
+import RegionSetPanel from './components/RegionSetPanel.vue';
+import StatusFooter from './components/StatusFooter.vue';
 
-useScreenController();
+const workspace = createWorkspace();
+provideWorkspace(workspace);
+const { regions } = workspace;
 </script>
 
 <template>
@@ -14,97 +25,24 @@ useScreenController();
     </p>
 
     <div class="top-row">
-      <div id="video-wrapper">
-        <div id="capture-stage">
-          <video id="webcam" autoplay playsinline muted></video>
-          <canvas id="overlay"></canvas>
-        </div>
-        <div id="capture-zoom-controls" aria-label="キャプチャ画面の拡大縮小">
-          <button type="button" id="capture-zoom-out" aria-label="キャプチャ画面を縮小">−</button>
-          <span id="capture-zoom-level" aria-live="polite">100%</span>
-          <button type="button" id="capture-zoom-in" aria-label="キャプチャ画面を拡大">＋</button>
-          <button type="button" id="capture-zoom-reset">リセット</button>
-          <span>Ctrl＋ホイールでズーム／Ctrl＋ドラッグで移動</span>
-        </div>
-      </div>
-
-      <div class="panel log-panel">
-        <h3>OCR結果ログ <span id="log-count" class="log-count"></span></h3>
-        <div id="log-list"><div class="log-empty">結果がここに時刻付きで蓄積されます...</div></div>
-        <div class="row log-toolbar">
-          <button class="sub button-success" id="csv-btn">CSVダウンロード</button>
-          <button class="sub button-danger" id="clear-log-btn">ログを消去</button>
-        </div>
-        <p class="note note--small note--log">結果はブラウザに自動保存され、再読み込みしても残ります。</p>
-      </div>
+      <CaptureView />
+      <OcrLogPanel />
     </div>
 
     <div class="bottom-row">
       <div class="panel">
         <h3>範囲の指定</h3>
-        <div class="group">
-          <label><input type="radio" name="draw-mode" value="ocr" checked> <span class="swatch ocr"></span>OCR範囲を描く（複数追加できます）</label>
-          <label><input type="radio" name="draw-mode" value="detect"> <span class="swatch detect"></span>変化検知範囲を描く（橙・破線／1つだけ）</label>
-          <label><input type="radio" name="draw-mode" value="edit"> 範囲の移動とリサイズ</label>
-          <p class="note note--edit-help">移動とリサイズ：範囲の枠内をドラッグで移動、四隅・四辺の□をドラッグでリサイズできます（OCR範囲は傾きに沿って伸縮）。</p>
-          <p class="note">範囲の削除は、各範囲のカードの「この範囲を削除」ボタンで行います。</p>
-        </div>
-
-        <div class="group">
-          <b class="set-title">範囲セット</b>
-          <p class="note note--set-help">OCR範囲すべてと変化検知範囲（各設定込み）を、名前を付けてブラウザに保存できます。</p>
-          <select id="set-select" class="field-gap-bottom"></select>
-          <input type="text" id="set-name" placeholder="保存する名前（空なら選択中のセットを上書き）">
-          <div class="row set-actions">
-            <button class="sub" id="set-save-btn" type="button">セーブ</button>
-            <button class="sub" id="set-load-btn" type="button">ロード</button>
-            <button class="sub button-danger" id="set-delete-btn" type="button">削除</button>
-          </div>
-          <div class="row">
-            <button class="sub" id="set-export-btn" type="button">JSONエクスポート</button>
-            <button class="sub" id="set-import-btn" type="button">JSONインポート</button>
-          </div>
-          <input type="file" id="set-import-file" accept=".json,application/json">
-        </div>
-
-        <div class="group">
-          <label>判定fps（1秒あたりの確認回数・すべての範囲で共通。プレビューも同じ頻度で更新）
-            <select id="check-fps">
-              <option value="1">1 fps</option>
-              <option value="2">2 fps</option>
-              <option value="5" selected>5 fps</option>
-              <option value="10">10 fps</option>
-              <option value="15">15 fps</option>
-            </select>
-          </label>
-          <label>OCR言語
-            <select id="ocr-lang">
-              <option value="jpn" selected>日本語 (jpn)</option>
-              <option value="jpn+eng">日本語＋英語 (jpn+eng)</option>
-              <option value="eng">英語 (eng)</option>
-            </select>
-          </label>
-        </div>
-
-        <details class="acc">
-          <summary>NDLOCR-Lite モデルの読み込み</summary>
-          <div class="acc-body">
-            <p class="note note--small note--compact">
-              NDLOCR-Lite（国立国会図書館）の <b>PARSeq の onnx（30／50／100文字用）</b> と文字セット <b>NDLmoji.yaml</b> を選択してください（複数選択可）。
-              ブラウザ（IndexedDB）に保存され、再読み込み後も使えます。使う範囲のカードで「OCRエンジン」を NDLOCR-Lite にしてください。
-            </p>
-            <input type="file" id="ndl-files" class="file-input" multiple accept=".onnx,.yaml,.yml,.txt">
-            <div id="ndl-status">読み込み状況を確認中...</div>
-            <button class="sub button-danger" id="ndl-clear-btn" type="button">保存済みモデルを削除</button>
-          </div>
-        </details>
-
-        <div id="state-text">画面を初期化しています...</div>
-        <div id="progress-text"></div>
-        <div id="debug-text">Vue画面を起動しています...</div>
+        <DrawModePanel />
+        <RegionSetPanel />
+        <CommonSettingsPanel />
+        <NdlModelPanel />
+        <StatusFooter />
       </div>
 
-      <div id="region-cards"></div>
+      <div id="region-cards">
+        <OcrRegionCard v-for="region in regions.ocrRegions.value" :key="region.id" :region="region" />
+        <DetectRegionCard v-if="regions.detectRegion.value" :region="regions.detectRegion.value" />
+      </div>
     </div>
   </main>
 </template>
