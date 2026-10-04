@@ -35,10 +35,12 @@ export function useOcrRunner({ regions, source, read, log, report }: OcrRunnerDe
         return;
       }
 
-      log.add({
-        text: outcome.text, reason, region: reg.name, method: outcome.method,
-        prefixUpdate: reg.read.type === 'ocr' && reg.read.prefixUpdate,
-      });
+      if (reg.read.type !== 'ocr' || outcome.text || reason === '手動') {
+        log.add({
+          text: outcome.text, reason, region: reg.name, method: outcome.method,
+          prefixUpdate: reg.read.type === 'ocr' && reg.read.prefixUpdate,
+        });
+      }
       if (outcome.engine !== 'ndl') report(`${reg.name}: 完了`);
       regions.setStatus(reg, { text: '読み取り完了', color: '#198754' });
     } catch (err: any) {
