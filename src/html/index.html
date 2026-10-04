@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LiveFeedOCR キャプチャ＆クロップ OCR (フィルタ機能付き)</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background-color: #f4f6f9; }
+    .container { display: flex; gap: 20px; align-items: flex-start; }
+    #video-wrapper { position: relative; display: inline-block; border: 2px solid #333; background-color: #000; }
+    #webcam { display: block; max-width: 800px; width: 100%; height: auto; }
+    #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; }
+    .panel { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 350px; }
+    #preview-img { max-width: 100%; border: 1px dashed #ccc; min-height: 50px; margin-bottom: 10px; background: #ddd; }
+    
+    .filter-group { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #dee2e6; }
+    .filter-group label { display: block; margin-bottom: 5px; font-size: 14px; }
+    .filter-group input[type="range"] { width: 100%; }
+    
+    button { padding: 10px 15px; font-size: 16px; cursor: pointer; background-color: #007bff; color: #fff; border: none; border-radius: 4px; width: 100%; }
+    button:disabled { background-color: #ccc; cursor: not-allowed; }
+    #result-text { margin-top: 15px; padding: 10px; background: #eee; white-space: pre-wrap; min-height: 100px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+
+  <h2>LiveFeedOCR 画面キャプチャ＆画像フィルタOCR</h2>
+  <p>映像上でドラッグして切り抜き、右側のパネルで文字がクッキリ見えるように調整してください。</p>
+
+  <div class="container">
+    <!-- 左側：映像表示と選択エリア -->
+    <div id="video-wrapper">
+      <video id="webcam" autoplay playsinline></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <!-- 右側：プレビュー、フィルタ操作、OCR結果 -->
+    <div class="panel">
+      <h3>切り取りプレビュー</h3>
+      <img id="preview-img" src="" alt="ここに切り取られた画像が表示されます">
+      
+      <!-- 画像前処理（フィルタ）コントロール -->
+      <div class="filter-group">
+        <label><input type="checkbox" id="filter-grayscale" checked> グレースケール化</label>
+        <label><input type="checkbox" id="filter-binarize" checked> 二値化（白黒化）</label>
+        <label>二値化しきい値: <span id="threshold-val">128</span>
+          <input type="range" id="slider-threshold" min="0" max="255" value="128">
+        </label>
+        <label><input type="checkbox" id="filter-invert"> 白黒反転（ネガポジ）</label>
+      </div>
+
+      <button id="send-btn" disabled>この状態の画像をOCRに送信</button>
+      
+      <h3>OCR結果</h3>
+      <div id="result-text">結果がここに表示されます...</div>
+    </div>
+  </div>
+
+  <!-- JavaScriptの読み込み -->
+  <script src="../js/script.js" defer></script>
+</body>
+</html>
