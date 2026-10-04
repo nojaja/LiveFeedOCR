@@ -24,9 +24,9 @@ watch(
     <h3 class="card-title">
       <span class="swatch" :style="{ '--swatch-color': DETECT_COLOR }"></span>
       <RegionNameEditor v-model:name="region.name" />
-      <button type="button" class="sub del-btn" @click="regions.removeDetect()">この範囲を削除</button>
+      <button type="button" class="sub del-btn" @click="regions.removeDetect(region)">この範囲を削除</button>
     </h3>
-    <p class="note note--small note--detect-help">この範囲が条件を満たしたら、すべてのOCR範囲の読み取りを実行します。</p>
+    <p class="note note--small note--detect-help">各条件は成立後に保持され、すべての変化検知範囲が成立すると、すべてのOCR範囲を読み取ります（AND）。</p>
     <DetectionSettingsSection :det="region.det" is-detect @capture-reference="actions.captureReference(region)" />
     <ItemStatus :ui="region.ui" />
   </div>

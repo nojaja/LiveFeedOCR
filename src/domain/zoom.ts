@@ -1,5 +1,5 @@
 export const MIN_ZOOM = 0.5;
-export const MAX_ZOOM = 4;
+export const MAX_ZOOM = 8;
 export const ZOOM_FACTOR = 1.1;
 export const PAN_THRESHOLD = 1.001;
 

@@ -62,7 +62,7 @@ defineEmits<{ captureReference: [] }>();
       <template #prefix>画素の差しきい値:</template>
       <template #suffix>（0〜255。{{ isDetect ? '変化検知範囲のグレースケール画像' : 'この範囲の切り取りプレビュー画像' }}に対して適用。小さいほど敏感・ノイズに弱い）</template>
     </RangeField>
-    <RangeField v-model="det.stable" :min="0" :max="3000" :step="100">
+    <RangeField v-model="det.stable" :min="0" :max="3000" :step="10">
       <template #prefix>安定待ち時間:</template>
       <template #suffix> ms（条件を満たしてから読み取るまでの待ち。0で即時）</template>
     </RangeField>

@@ -55,7 +55,7 @@ export function useRegionEditor(opts: RegionEditorOptions) {
       zoom,
       panX,
       panY,
-      detect: regions.detectRegion.value,
+      detect: regions.detectRegions.value,
       ocr: regions.ocrRegions.value,
       showHandles: drawMode.value === 'edit',
       draft: draft.value,
@@ -129,7 +129,7 @@ export function useRegionEditor(opts: RegionEditorOptions) {
       if (!regions.canAddOcr()) dialogs.alert(`OCR範囲は最大 ${MAX_OCR_REGIONS} 個までです。不要な範囲を削除してください。`);
       else regions.addOcr(rect);   // 追加直後に1回読み取る
     } else {
-      regions.setDetect(rect);     // 変化検知範囲は1つ。描き直すと置き換え
+      regions.addDetect(rect);
     }
   }
 

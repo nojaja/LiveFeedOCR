@@ -16,7 +16,7 @@ export interface ItemUi {
 }
 
 export type OcrView = OcrRegion & { rt: RegionRuntime; ui: ItemUi };
-export type DetectView = DetectRegion & { rt: RegionRuntime; ui: ItemUi };
+export type DetectView = DetectRegion & { rt: RegionRuntime; ui: ItemUi; andMet: boolean };
 export type RegionView = OcrView | DetectView;
 
 function createRuntime(withPreview: boolean): RegionRuntime {
@@ -39,14 +39,15 @@ function toMetricView(m: NonNullable<Verdict['metric']>): MetricView {
 
 export interface RegionsHooks { onClear?: () => void }
 
-// OCR範囲(複数)と変化検知範囲(1つ)のリアクティブな状態と、その編集操作
+// OCR範囲と変化検知範囲のリアクティブな状態と、その編集操作
 export function useRegions(hooks: RegionsHooks = {}) {
   const ocrRegions = ref<OcrView[]>([]) as Ref<OcrView[]>;
-  const detectRegion = ref<DetectView | null>(null) as Ref<DetectView | null>;
+  const detectRegions = ref<DetectView[]>([]) as Ref<DetectView[]>;
   const nextId = ref(1);
+  const nextDetectId = ref(1);
 
   function allItems(): RegionView[] {
-    return (ocrRegions.value as RegionView[]).concat(detectRegion.value ? [detectRegion.value] : []);
+    return (ocrRegions.value as RegionView[]).concat(detectRegions.value);
   }
 
   function addOcr(rect: Rect, saved?: any): OcrView {
@@ -62,23 +63,26 @@ export function useRegions(hooks: RegionsHooks = {}) {
     ocrRegions.value = ocrRegions.value.filter(r => r !== reg);
   }
 
-  function setDetect(rect: Rect, saved?: any): DetectView {
-    const view: DetectView = { ...createDetectRegion(rect, saved), rt: createRuntime(false), ui: createUi() };
+  function addDetect(rect: Rect, saved?: any): DetectView {
+    let id = saved && saved.id;
+    if (!id || detectRegions.value.some(r => r.id === id)) id = nextDetectId.value++;
+    nextDetectId.value = Math.max(nextDetectId.value, id + 1);
+    const view: DetectView = { ...createDetectRegion(rect, id, saved), rt: createRuntime(false), ui: createUi(), andMet: false };
     view.rt.detection.rebase = true;   // 設定しただけでは読み取らない
-    detectRegion.value = view;
-    return detectRegion.value;
+    detectRegions.value.push(view);
+    return view;
   }
 
-  function removeDetect() { detectRegion.value = null; }
+  function removeDetect(reg: DetectView) { detectRegions.value = detectRegions.value.filter(item => item !== reg); }
 
   function clear() {
     ocrRegions.value = [];
-    detectRegion.value = null;
+    detectRegions.value = [];
     hooks.onClear?.();
   }
 
   function snapshot(name = ''): RegionSnapshot {
-    return createSnapshot(name, nextId.value, ocrRegions.value, detectRegion.value);
+    return createSnapshot(name, nextId.value, ocrRegions.value, detectRegions.value, nextDetectId.value);
   }
 
   // 保存した範囲一式を現在の作業状態として復元する（直後に勝手に読み取らないよう基準だけ取り直す）
@@ -86,12 +90,14 @@ export function useRegions(hooks: RegionsHooks = {}) {
     clear();
     const restored = restoreSnapshot(snap);
     nextId.value = restored.nextId;
+    nextDetectId.value = restored.nextDetectId;
     restored.ocr.forEach(e => { addOcr(e.rect, e.saved).rt.detection.rebase = true; });
-    if (restored.detect) setDetect(restored.detect.rect, restored.detect.saved).rt.detection.rebase = true;
+    restored.detect.forEach(e => { addDetect(e.rect, e.saved).rt.detection.rebase = true; });
   }
 
   function resetItem(item: RegionView, silent: boolean) {
     resetDetection(item.rt.detection, silent);
+    if (item.kind === 'detect') item.andMet = false;
   }
 
   function setStatus(item: RegionView, message: StatusMessage) {
@@ -105,9 +111,9 @@ export function useRegions(hooks: RegionsHooks = {}) {
   }
 
   return {
-    ocrRegions, detectRegion, nextId, allItems,
+    ocrRegions, detectRegions, nextId, nextDetectId, allItems,
     canAddOcr: () => ocrRegions.value.length < MAX_OCR_REGIONS,
-    addOcr, removeOcr, setDetect, removeDetect, clear,
+    addOcr, removeOcr, addDetect, removeDetect, clear,
     snapshot, applySnapshot, resetItem, setStatus, report,
   };
 }

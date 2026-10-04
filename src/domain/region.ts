@@ -41,6 +41,7 @@ export interface OcrRegion extends Rect {
 
 export interface DetectRegion extends Rect {
   kind: 'detect';
+  id: number;
   name: string;
   det: Detection;
 }
@@ -106,10 +107,11 @@ export function createOcrRegion(rect: Rect, id: number, saved?: any): OcrRegion 
   return region;
 }
 
-export function createDetectRegion(rect: Rect, saved?: any): DetectRegion {
+export function createDetectRegion(rect: Rect, id: number, saved?: any): DetectRegion {
   return {
     kind: 'detect',
-    name: '変化検知範囲',
+    id,
+    name: (saved && saved.name) || `変化検知範囲 ${id}`,
     x: rect.x, y: rect.y, w: rect.w, h: rect.h,
     det: Object.assign({}, DEFAULT_DET, saved && saved.det),
   };
@@ -123,24 +125,27 @@ export interface RegionSnapshot {
   version: number;
   name: string;
   nextId: number;
+  nextDetectId?: number;
   ocrRegions: any[];
-  detect: any | null;
+  detect: any[] | any | null;
 }
 
 export function serializeRegion(it: RegionItem): any {
   const o: any = { name: it.name, x: it.x, y: it.y, w: it.w, h: it.h, det: it.det };
-  if (it.kind === 'ocr') { o.id = it.id; o.angle = it.angle; o.filters = it.filters; o.read = it.read; }
+  o.id = it.id;
+  if (it.kind === 'ocr') { o.angle = it.angle; o.filters = it.filters; o.read = it.read; }
   return o;
 }
 
-export function createSnapshot(name: string, nextId: number, ocr: OcrRegion[], detect: DetectRegion | null): RegionSnapshot {
+export function createSnapshot(name: string, nextId: number, ocr: OcrRegion[], detect: DetectRegion[], nextDetectId = 1): RegionSnapshot {
   return {
     format: REGION_SET_FORMAT,
     version: 1,
     name: name || '',
     nextId,
+    nextDetectId,
     ocrRegions: ocr.map(serializeRegion),
-    detect: detect ? serializeRegion(detect) : null,
+    detect: detect.map(serializeRegion),
   };
 }
 
@@ -150,8 +155,9 @@ export function isRegionSet(snap: any): boolean {
 
 export interface RestoredRegions {
   nextId: number;
+  nextDetectId: number;
   ocr: { rect: Rect; saved: any }[];
-  detect: { rect: Rect; saved: any } | null;
+  detect: { rect: Rect; saved: any }[];
 }
 
 // 保存データから復元対象だけを取り出す（不正な矩形は除外し、OCR範囲は上限まで）
@@ -159,16 +165,22 @@ export function restoreSnapshot(snap: any): RestoredRegions {
   const ocr = (snap.ocrRegions || []).slice(0, MAX_OCR_REGIONS)
     .map((saved: any) => ({ rect: sanitizeRect(saved), saved }))
     .filter((e: any) => e.rect);
-  const detectRect = snap.detect ? sanitizeRect(snap.detect) : null;
+  // v1旧形式ではdetectは単一オブジェクト、新形式では配列。
+  const savedDetects = Array.isArray(snap.detect) ? snap.detect : snap.detect ? [snap.detect] : [];
+  const detect = savedDetects
+    .map((saved: any) => ({ rect: sanitizeRect(saved), saved }))
+    .filter((e: any) => e.rect);
   return {
     nextId: Math.max(1, snap.nextId || 1),
+    nextDetectId: Math.max(1, snap.nextDetectId || 1, ...detect.map((e: any) => (Number(e.saved.id) || 0) + 1)),
     ocr,
-    detect: detectRect ? { rect: detectRect, saved: snap.detect } : null,
+    detect,
   };
 }
 
 export function describeRegionSet(s: any): string {
-  return `OCR範囲 ${(s.ocrRegions || []).length}個${s.detect ? '＋検知範囲' : ''}`;
+  const detectCount = Array.isArray(s.detect) ? s.detect.length : (s.detect ? 1 : 0);
+  return `OCR範囲 ${(s.ocrRegions || []).length}個${detectCount ? `＋変化検知範囲 ${detectCount}個（AND）` : ''}`;
 }
 
 export function uniqueName(base: string, existing: Record<string, unknown>): string {

@@ -36,10 +36,10 @@ export function useMonitor(deps: MonitorDeps) {
 
   function step() {
     debugText.value = deps.describeVideo() +
-      ` ／ OCR範囲 ${regions.ocrRegions.value.length} 個 ／ 変化検知範囲 ${regions.detectRegion.value ? 'あり' : 'なし'}`;
+      ` ／ OCR範囲 ${regions.ocrRegions.value.length} 個 ／ 変化検知範囲 ${regions.detectRegions.value.length} 個`;
     if (deps.isBusy()) return;   // 範囲を移動/リサイズしている間は判定しない
     const result = runMonitorStep(
-      regions.ocrRegions.value, regions.detectRegion.value, source, sink, performance.now(),
+      regions.ocrRegions.value, regions.detectRegions.value, source, sink, performance.now(),
     );
     setState(result.text, result.color);
   }

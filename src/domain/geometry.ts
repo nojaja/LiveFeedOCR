@@ -8,8 +8,8 @@ export const HANDLES: Handle[] = [
   { n: 's', sx: 0, sy: 1 }, { n: 'sw', sx: -1, sy: 1 }, { n: 'w', sx: -1, sy: 0 },
 ];
 export const HANDLE_HIT = 9;   // ハンドルの当たり判定(px)
-export const MIN_REGION = 10;  // 範囲の最小サイズ(px)
-export const MIN_DRAW_SIZE = 10;
+export const MIN_REGION = 4;  // 範囲の最小サイズ(px)
+export const MIN_DRAW_SIZE = 4;
 
 export interface Point { x: number; y: number }
 export interface Size { width: number; height: number }
@@ -115,7 +115,7 @@ export function computeDragRect(d: DragState, p: Point, size: Size): Rect {
 export function rectFromDrag(start: Point, end: Point, size: Size): Rect | null {
   const w = Math.abs(end.x - start.x);
   const h = Math.abs(end.y - start.y);
-  if (w <= MIN_DRAW_SIZE || h <= MIN_DRAW_SIZE) return null;
+  if (w < MIN_DRAW_SIZE || h < MIN_DRAW_SIZE) return null;
   return {
     x: Math.min(start.x, end.x) / size.width,
     y: Math.min(start.y, end.y) / size.height,

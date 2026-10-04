@@ -47,7 +47,9 @@ export function resetDetection(st: DetectionState, silent: boolean): void {
   st.rebase = !!silent;
   st.accum = null;
   st.refInit = false;
+  st.refCond = false;
   st.refPending = false;
+  st.refSince = 0;
 }
 
 // 判定用に小さな解像度へ縮小するときのサイズ

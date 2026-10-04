@@ -53,7 +53,7 @@ export interface OverlayScene {
   zoom: number;
   panX: number;
   panY: number;
-  detect: RegionItem | null;
+  detect: RegionItem[];
   ocr: RegionItem[];
   showHandles: boolean;
   draft: DraftRect | null;
@@ -70,11 +70,11 @@ export function renderOverlay(ctx: CanvasRenderingContext2D, scene: OverlayScene
     const g = toPixels(it, size);
     drawRect(ctx, g.cx, g.cy, g.w, g.h, g.a, regionColor(it), it.kind === 'detect' ? [6, 4] : [], it.name, zoom, labelAbove(g.cy, g.h));
   };
-  if (scene.detect) drawItem(scene.detect);
+  scene.detect.forEach(drawItem);
   scene.ocr.forEach(drawItem);
 
   if (scene.showHandles) {
-    (scene.detect ? [...scene.ocr, scene.detect] : scene.ocr).forEach(it => drawHandles(ctx, it, size, zoom));
+    [...scene.ocr, ...scene.detect].forEach(it => drawHandles(ctx, it, size, zoom));
   }
 
   const d = scene.draft;

@@ -16,7 +16,7 @@ export interface RegionSetDeps {
 export function useRegionSets({ regions, repository, dialogs, download, selected }: RegionSetDeps) {
   const sets = ref<Record<string, RegionSnapshot>>(repository.readAll());
   const newName = ref('');
-  const hasRegions = () => regions.ocrRegions.value.length > 0 || !!regions.detectRegion.value;
+  const hasRegions = () => regions.ocrRegions.value.length > 0 || regions.detectRegions.value.length > 0;
 
   const options = computed(() => Object.keys(sets.value).sort().map(name => ({
     name, label: `${name}（${describeRegionSet(sets.value[name])}）`,
@@ -69,7 +69,7 @@ export function useRegionSets({ regions, repository, dialogs, download, selected
   function exportJson() {
     const name = newName.value.trim() || selected.value || REGION_SET_FORMAT;
     const snap = regions.snapshot(name);
-    if (!snap.ocrRegions.length && !snap.detect) { dialogs.alert('エクスポートする範囲がありません。'); return; }
+    if (!snap.ocrRegions.length && !snap.detect?.length) { dialogs.alert('エクスポートする範囲がありません。'); return; }
     const blob = new Blob([JSON.stringify(snap, null, 2)], { type: 'application/json' });
     download(blob, `ocr-region-set_${name.replace(/[\\/:*?"<>|\s]+/g, '_')}.json`);
   }
@@ -96,7 +96,7 @@ export function useRegionSets({ regions, repository, dialogs, download, selected
     const name = uniqueName(base, all);
     all[name] = regions.snapshot(name);
     if (write(all)) refresh(name);
-    dialogs.alert(`範囲セットをインポートしました（OCR範囲 ${regions.ocrRegions.value.length}個${regions.detectRegion.value ? '＋変化検知範囲' : ''}）。保存済み一覧には「${name}」として追加しました。`);
+    dialogs.alert(`範囲セットをインポートしました（OCR範囲 ${regions.ocrRegions.value.length}個＋変化検知範囲 ${regions.detectRegions.value.length}個）。保存済み一覧には「${name}」として追加しました。`);
   }
 
   return { sets, options, selected, newName, refresh, save, load, remove, exportJson, importFile };

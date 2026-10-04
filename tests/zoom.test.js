@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { adjustZoom, clampPanOffset, mapPointToZoomedContent, MIN_ZOOM, MAX_ZOOM } from '../src/domain/zoom.ts';
 
 test('Ctrl+wheel相当の入力で拡大縮小し、上限下限を超えない', () => {
+  assert.equal(MAX_ZOOM, 8);
   assert.ok(adjustZoom(1, -1) > 1);
   assert.ok(adjustZoom(1, 1) < 1);
   assert.equal(adjustZoom(MAX_ZOOM, -1), MAX_ZOOM);
