@@ -56,6 +56,8 @@
     .card-title { display: flex; align-items: center; gap: 6px; }
     .card-title .rname { flex: 1; }
     .del-btn { width: auto; }
+    .ref-img { display: block; max-width: 100%; border: 1px solid #ccc; margin-bottom: 6px; background: #ddd; }
+    #set-select { width: 100%; padding: 3px; }
     .preview { display: block; max-width: 100%; height: auto; border: 1px dashed #ccc; min-height: 50px; margin-bottom: 10px; background: #ddd; }
 
     #log-list { flex: 1 1 0; min-height: 240px; overflow-y: auto; background: #e9edf2; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
@@ -74,8 +76,9 @@
 
   <h2>LiveFeedOCR 画面キャプチャ＆画像フィルタOCR（変化検知つき）</h2>
   <p>
-    映像上でドラッグして範囲を指定します。<b>OCR範囲</b> は複数描けて、それぞれが切り取りプレビュー・画像前処理・変化検知の設定を持ちます。
-    <b>変化検知範囲</b> が変化したときは、すべてのOCR範囲をまとめてOCRします。範囲や画像前処理の設定はブラウザに自動保存されます。
+    映像上でドラッグして範囲を指定します。<b>OCR範囲</b> は複数描けて、読み取り方式（OCR／QRコード）・画像前処理・変化検知の設定を範囲ごとに持てます。
+    <b>変化検知範囲</b> が変化（またはリファレンス画像と一致）したときは、すべてのOCR範囲をまとめて読み取ります。
+    範囲の組み合わせは「範囲セット」として保存・JSON入出力できます。
   </p>
 
   <!-- 上段：キャプチャ画面 ＋ OCR結果ログ -->
@@ -109,6 +112,23 @@
       </div>
 
       <div class="group">
+        <b style="font-size:14px;">範囲セット</b>
+        <p class="note" style="margin:2px 0 6px;">OCR範囲すべてと変化検知範囲（各設定込み）を、名前を付けてブラウザに保存できます。</p>
+        <select id="set-select" style="margin-bottom:6px;"></select>
+        <input type="text" id="set-name" placeholder="保存する名前（空なら選択中のセットを上書き）" style="width:100%;box-sizing:border-box;padding:4px;margin-bottom:6px;">
+        <div class="row" style="margin-bottom:6px;">
+          <button class="sub" id="set-save-btn" type="button">セーブ</button>
+          <button class="sub" id="set-load-btn" type="button">ロード</button>
+          <button class="sub" id="set-delete-btn" type="button" style="background-color:#dc3545;">削除</button>
+        </div>
+        <div class="row">
+          <button class="sub" id="set-export-btn" type="button">JSONエクスポート</button>
+          <button class="sub" id="set-import-btn" type="button">JSONインポート</button>
+        </div>
+        <input type="file" id="set-import-file" accept=".json,application/json" style="display:none;">
+      </div>
+
+      <div class="group">
         <label>判定fps（1秒あたりの確認回数・すべての範囲で共通。プレビューも同じ頻度で更新）
           <select id="check-fps">
             <option value="1">1 fps</option>
@@ -127,6 +147,19 @@
         </label>
       </div>
 
+      <details class="acc">
+        <summary>NDLOCR-Lite モデルの読み込み</summary>
+        <div class="acc-body">
+          <p class="note" style="font-size:12px;color:#666;margin:0 0 6px;">
+            NDLOCR-Lite（国立国会図書館）の <b>PARSeq の onnx（30／50／100文字用）</b> と文字セット <b>NDLmoji.yaml</b> を選択してください（複数選択可）。
+            ブラウザ（IndexedDB）に保存され、再読み込み後も使えます。使う範囲のカードで「OCRエンジン」を NDLOCR-Lite にしてください。
+          </p>
+          <input type="file" id="ndl-files" multiple accept=".onnx,.yaml,.yml,.txt" style="width:100%;margin-bottom:6px;">
+          <div id="ndl-status" style="font-size:12px;color:#444;white-space:pre-wrap;word-break:break-all;margin-bottom:6px;">読み込み状況を確認中...</div>
+          <button class="sub" id="ndl-clear-btn" type="button" style="background-color:#dc3545;">保存済みモデルを削除</button>
+        </div>
+      </details>
+
       <div id="state-text">script.js を読み込み中...</div>
       <div id="progress-text"></div>
       <div id="debug-text" style="font-size:11px;color:#888;margin-top:6px;word-break:break-all;">script.js 未実行（古いファイルを読んでいる可能性）</div>
@@ -138,6 +171,8 @@
 
   <!-- JavaScriptの読み込み -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist/ort.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
   <script src="../js/script.js" defer></script>
 </body>
 </html>
