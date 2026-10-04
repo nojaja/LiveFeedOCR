@@ -1,0 +1,18 @@
+{
+  "name": "live-feed-ocr",
+  "version": "0.0.9",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite src/html --host 0.0.0.0",
+    "build": "vite build src/html --outDir ../../dist",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@paddleocr/paddleocr-js": "0.4.2",
+    "onnxruntime-web": "1.24.3"
+  },
+  "devDependencies": {
+    "vite": "^6.4.3"
+  }
+}

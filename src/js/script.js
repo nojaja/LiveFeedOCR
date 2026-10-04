@@ -1,3 +1,5 @@
+import { normalizePaddleOcrResult } from './ocr-providers.js';
+
 // ===== 要素 =====
 const SCRIPT_VERSION = 'v6';
 const debugText = document.getElementById('debug-text');
@@ -49,7 +51,7 @@ const DEFAULT_DET = {
 };
 const DEFAULT_READ = {
   type: 'ocr',         // ocr / qr
-  engine: 'tesseract', // tesseract / ndl
+  engine: 'tesseract', // tesseract / ndl / paddle
   stripWs: true,       // スペース・改行を除去
   prefixUpdate: true,  // 前回結果と前方一致なら文字送りとみなして更新
 };
@@ -743,6 +745,7 @@ function buildOcrCard(reg) {
           <select data-path="read.engine">
             <option value="tesseract">Tesseract.js</option>
             <option value="ndl">NDLOCR-Lite（モデル読み込みが必要）</option>
+            <option value="paddle">PaddleOCR.js（初回にモデルを取得）</option>
           </select>
         </label>
         <label data-when="read.type=ocr"><input type="checkbox" data-path="read.stripWs"> OCR結果のスペース・改行を除去する</label>
@@ -1313,7 +1316,7 @@ function monitorStep() {
   setState(`監視中（OCR範囲 ${ocrRegions.length} 個${detectRegion ? ' ＋ 変化検知範囲' : ''}）`, '#198754');
 }
 
-// ===== 7. 読み取り：Tesseract.js / NDLOCR-Lite / QRコード =====
+// ===== 7. 読み取り：Tesseract.js / NDLOCR-Lite / PaddleOCR.js / QRコード =====
 // ----- Tesseract.js（ワーカーを使い回す） -----
 let worker = null;
 let workerLang = null;
@@ -1341,6 +1344,32 @@ async function recognizeTesseract(canvas) {
   const w = await getWorker(ocrLang.value);
   const result = await w.recognize(canvas.toDataURL('image/png'));
   return result.data.text;
+}
+
+// ----- PaddleOCR.js（ブラウザー内モデル推論。初期化済みインスタンスを共有） -----
+let paddleOcrPromise = null;
+
+async function recognizePaddleOcr(canvas) {
+  if (!paddleOcrPromise) {
+    progressText.textContent = 'PaddleOCRモデルを準備中...（初回はモデルのダウンロードが必要です）';
+    paddleOcrPromise = import('@paddleocr/paddleocr-js').then(({ PaddleOCR }) => PaddleOCR.create({
+      lang: 'japan',
+      ocrVersion: 'PP-OCRv5',
+      worker: true,
+      ortOptions: {
+        backend: 'wasm',
+        numThreads: 1,
+        wasmPaths: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/',
+      },
+    })).catch(error => {
+      paddleOcrPromise = null;
+      throw error;
+    });
+  }
+  const engine = await paddleOcrPromise;
+  progressText.textContent = 'PaddleOCRで認識中...';
+  const [result] = await engine.predict(canvas);
+  return normalizePaddleOcrResult(result);
 }
 
 // ----- QRコード（jsQR） -----
@@ -1685,14 +1714,21 @@ async function runOcrJob({ reg, reason }) {
         return;
       }
     } else {
-      method = reg.read.engine === 'ndl' ? 'NDLOCR-Lite' : 'Tesseract';
-      text = (reg.read.engine === 'ndl' ? await recognizeNdl(canvas) : await recognizeTesseract(canvas)).trim();
+      const recognizers = {
+        tesseract: recognizeTesseract,
+        ndl: recognizeNdl,
+        paddle: recognizePaddleOcr,
+      };
+      const methodNames = { tesseract: 'Tesseract', ndl: 'NDLOCR-Lite', paddle: 'PaddleOCR' };
+      const engine = reg.read.engine in recognizers ? reg.read.engine : 'tesseract';
+      method = methodNames[engine];
+      text = (await recognizers[engine](canvas)).trim();
       // スペース・改行の除去（範囲ごとにON/OFF）。全角スペースも含む
       if (reg.read.stripWs) text = text.replace(/[\s\u3000]+/g, '');
     }
 
     addLogEntry({ text, reason, region: reg.name, method, prefixUpdate: reg.read.type === 'ocr' && reg.read.prefixUpdate });
-    if (reg.read.engine !== 'ndl' || reg.read.type === 'qr') progressText.textContent = `${reg.name}: 完了`;
+    if (reg.read.type === 'qr' || reg.read.engine !== 'ndl') progressText.textContent = `${reg.name}: 完了`;
     setItemState(reg, '読み取り完了', '#198754');
   } catch (err) {
     console.error(err);
