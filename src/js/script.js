@@ -1,10 +1,14 @@
 import { normalizePaddleOcrResult } from './ocr-providers.js';
+import { adjustZoom, clampPanOffset, mapPointToZoomedContent } from './zoom.js';
 
 // ===== 要素 =====
 const SCRIPT_VERSION = 'v6';
 const debugText = document.getElementById('debug-text');
 const video = document.getElementById('webcam');
 const overlay = document.getElementById('overlay');
+const videoWrapper = document.getElementById('video-wrapper');
+const captureStage = document.getElementById('capture-stage');
+const captureZoomLevel = document.getElementById('capture-zoom-level');
 const ctx = overlay.getContext('2d');
 const regionCards = document.getElementById('region-cards');
 const logList = document.getElementById('log-list');
@@ -310,6 +314,7 @@ async function initCamera() {
 function resizeOverlay() {
   overlay.width = video.clientWidth;
   overlay.height = video.clientHeight;
+  applyCaptureTransform();
   redraw();
 }
 video.addEventListener('loadedmetadata', resizeOverlay);
@@ -319,20 +324,111 @@ if (window.ResizeObserver) new ResizeObserver(resizeOverlay).observe(video);
 // ===== 2. 範囲指定（マウス/タッチ） =====
 let isDrawing = false;
 let startX = 0, startY = 0, curX = 0, curY = 0;
+let captureZoom = 1;
+const capturePan = { x: 0, y: 0 };
+let capturePanState = null;
+let controlPressed = false;
+
+function refreshPanCursors() {
+  videoWrapper.classList.toggle('is-pan-ready', controlPressed && captureZoom > 1.001);
+  document.querySelectorAll('.preview-viewport.is-zoomed').forEach(viewport => {
+    viewport.classList.toggle('is-pan-ready', controlPressed);
+  });
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Control' || controlPressed) return;
+  controlPressed = true;
+  refreshPanCursors();
+});
+document.addEventListener('keyup', event => {
+  if (event.key !== 'Control') return;
+  controlPressed = false;
+  refreshPanCursors();
+});
+window.addEventListener('blur', () => {
+  controlPressed = false;
+  refreshPanCursors();
+});
+
+function clampCapturePan() {
+  capturePan.x = clampPanOffset(videoWrapper.clientWidth, captureStage.offsetWidth, captureZoom, capturePan.x);
+  capturePan.y = clampPanOffset(videoWrapper.clientHeight, captureStage.offsetHeight, captureZoom, capturePan.y);
+}
+
+function applyCaptureTransform() {
+  clampCapturePan();
+  captureStage.style.transform = `translate(${capturePan.x}px, ${capturePan.y}px) scale(${captureZoom})`;
+}
+
+function setCaptureZoom(zoom) {
+  captureZoom = Math.min(4, Math.max(0.5, zoom));
+  applyCaptureTransform();
+  captureZoomLevel.textContent = `${Math.round(captureZoom * 100)}%`;
+  refreshPanCursors();
+}
+
+function beginCapturePan(event) {
+  if (!event.ctrlKey || captureZoom <= 1.001 || event.button !== 0) return false;
+  event.preventDefault();
+  overlay.setPointerCapture(event.pointerId);
+  capturePanState = {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    x: capturePan.x,
+    y: capturePan.y,
+  };
+  videoWrapper.classList.add('is-panning');
+  return true;
+}
+
+function moveCapturePan(event) {
+  if (!capturePanState) return false;
+  capturePan.x = capturePanState.x + event.clientX - capturePanState.clientX;
+  capturePan.y = capturePanState.y + event.clientY - capturePanState.clientY;
+  applyCaptureTransform();
+  return true;
+}
+
+function endCapturePan() {
+  if (!capturePanState) return false;
+  capturePanState = null;
+  videoWrapper.classList.remove('is-panning');
+  return true;
+}
+
+function changeCaptureZoom(deltaY) {
+  setCaptureZoom(adjustZoom(captureZoom, deltaY));
+}
+
+videoWrapper.addEventListener('wheel', event => {
+  if (!event.ctrlKey) return;
+  event.preventDefault();
+  changeCaptureZoom(event.deltaY);
+}, { passive: false });
+document.getElementById('capture-zoom-in').addEventListener('click', () => changeCaptureZoom(-1));
+document.getElementById('capture-zoom-out').addEventListener('click', () => changeCaptureZoom(1));
+document.getElementById('capture-zoom-reset').addEventListener('click', () => setCaptureZoom(1));
+document.getElementById('capture-zoom-controls').addEventListener('pointerdown', event => event.stopPropagation());
 
 function getDrawMode() {
   return document.querySelector('input[name="draw-mode"]:checked').value;
 }
 
 function getPos(e) {
-  const rect = overlay.getBoundingClientRect();
-  return {
-    x: Math.min(Math.max(e.clientX - rect.left, 0), rect.width),
-    y: Math.min(Math.max(e.clientY - rect.top, 0), rect.height),
+  const rect = videoWrapper.getBoundingClientRect();
+  const bounds = {
+    left: rect.left + videoWrapper.clientLeft,
+    top: rect.top + videoWrapper.clientTop,
+    width: captureStage.offsetWidth,
+    height: captureStage.offsetHeight,
   };
+  return mapPointToZoomedContent(e.clientX, e.clientY, bounds, captureZoom, capturePan.x, capturePan.y);
 }
 
 overlay.addEventListener('pointerdown', (e) => {
+  if (beginCapturePan(e)) return;
   const p = getPos(e);
 
   // 「範囲の移動とリサイズ」モード：掴んだ範囲/ハンドルのドラッグを開始
@@ -352,6 +448,7 @@ overlay.addEventListener('pointerdown', (e) => {
 });
 
 overlay.addEventListener('pointermove', (e) => {
+  if (moveCapturePan(e)) return;
   const p = getPos(e);
   if (dragState) { applyDrag(p); return; }
   if (!isDrawing) { updateCursor(p); return; }
@@ -360,11 +457,13 @@ overlay.addEventListener('pointermove', (e) => {
   redraw();
 });
 
-overlay.addEventListener('pointerup', () => {
+overlay.addEventListener('pointerup', (e) => {
+  if (endCapturePan()) return;
   if (dragState) endDrag();
   else finishDrawing();
 });
 overlay.addEventListener('pointercancel', () => {
+  if (endCapturePan()) return;
   if (dragState) endDrag();
   isDrawing = false;
   redraw();
@@ -712,8 +811,66 @@ function collectEl(card) {
     diffFill: card.querySelector('.diff-fill'),
     diffMark: card.querySelector('.diff-mark'),
     preview,
+    previewViewport: card.querySelector('.preview-viewport'),
+    previewZoomLevel: card.querySelector('.preview-zoom-level'),
     previewCtx: preview ? preview.getContext('2d', { willReadFrequently: true }) : null,
   };
+}
+
+const previewZoomLevels = new WeakMap();
+const previewPanStates = new WeakMap();
+
+function applyPreviewZoom(canvas, zoom) {
+  const viewport = canvas.parentElement;
+  const fitWidth = Math.max(1, Math.min(canvas.width, viewport.clientWidth || canvas.width));
+  canvas.style.width = `${fitWidth * zoom}px`;
+}
+
+function setPreviewZoom(reg, zoom) {
+  const level = Math.min(4, Math.max(0.5, zoom));
+  const { preview, previewViewport } = reg.rt.el;
+  previewZoomLevels.set(preview, level);
+  previewViewport.classList.toggle('is-zoomed', level > 1.001);
+  applyPreviewZoom(reg.rt.el.preview, level);
+  reg.rt.el.previewZoomLevel.textContent = `${Math.round(level * 100)}%`;
+  if (level <= 1.001) {
+    previewViewport.scrollLeft = 0;
+    previewViewport.scrollTop = 0;
+  }
+  refreshPanCursors();
+}
+
+function changePreviewZoom(reg, deltaY) {
+  const current = previewZoomLevels.get(reg.rt.el.preview) || 1;
+  setPreviewZoom(reg, adjustZoom(current, deltaY));
+}
+
+function beginPreviewPan(viewport, event) {
+  const canvas = viewport.querySelector('.preview');
+  if (!event.ctrlKey || (previewZoomLevels.get(canvas) || 1) <= 1.001 || event.button !== 0) return;
+  event.preventDefault();
+  viewport.setPointerCapture(event.pointerId);
+  previewPanStates.set(viewport, {
+    pointerId: event.pointerId,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    scrollLeft: viewport.scrollLeft,
+    scrollTop: viewport.scrollTop,
+  });
+  viewport.classList.add('is-panning');
+}
+
+function movePreviewPan(viewport, event) {
+  const state = previewPanStates.get(viewport);
+  if (!state) return;
+  viewport.scrollLeft = state.scrollLeft - (event.clientX - state.clientX);
+  viewport.scrollTop = state.scrollTop - (event.clientY - state.clientY);
+}
+
+function endPreviewPan(viewport) {
+  if (!previewPanStates.has(viewport)) return;
+  previewPanStates.delete(viewport);
+  viewport.classList.remove('is-panning');
 }
 
 const DIFF_HTML = `
@@ -730,7 +887,14 @@ function buildOcrCard(reg) {
       <span class="rname"></span>
       <button type="button" class="sub del-btn">この範囲を削除</button>
     </h3>
-    <canvas class="preview" width="300" height="80"></canvas>
+    <div class="preview-zoom-controls">
+      <span>プレビュー（Ctrl＋ホイールで拡大、Ctrl＋ドラッグで移動）</span>
+      <button type="button" class="sub preview-zoom-out" aria-label="プレビューを縮小">−</button>
+      <span class="preview-zoom-level" aria-live="polite">100%</span>
+      <button type="button" class="sub preview-zoom-in" aria-label="プレビューを拡大">＋</button>
+      <button type="button" class="sub preview-zoom-reset">リセット</button>
+    </div>
+    <div class="preview-viewport"><canvas class="preview" width="300" height="80"></canvas></div>
 
     <details class="acc" open>
       <summary>読み取り設定</summary>
@@ -775,6 +939,18 @@ function buildOcrCard(reg) {
   card.querySelector('.rname').textContent = reg.name;
   regionCards.appendChild(card);
   reg.rt.el = collectEl(card);
+  reg.rt.el.previewViewport.addEventListener('wheel', event => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    changePreviewZoom(reg, event.deltaY);
+  }, { passive: false });
+  reg.rt.el.previewViewport.addEventListener('pointerdown', event => beginPreviewPan(reg.rt.el.previewViewport, event));
+  reg.rt.el.previewViewport.addEventListener('pointermove', event => movePreviewPan(reg.rt.el.previewViewport, event));
+  reg.rt.el.previewViewport.addEventListener('pointerup', () => endPreviewPan(reg.rt.el.previewViewport));
+  reg.rt.el.previewViewport.addEventListener('pointercancel', () => endPreviewPan(reg.rt.el.previewViewport));
+  card.querySelector('.preview-zoom-in').addEventListener('click', () => changePreviewZoom(reg, -1));
+  card.querySelector('.preview-zoom-out').addEventListener('click', () => changePreviewZoom(reg, 1));
+  card.querySelector('.preview-zoom-reset').addEventListener('click', () => setPreviewZoom(reg, 1));
 
   bindInputs(card, reg, (path) => {
     if (path === 'angle' || path.startsWith('filters.') || path === 'det.mode' || path.startsWith('det.accum')) {
@@ -1035,6 +1211,7 @@ function updatePreview(reg) {
   if (reg.det.mode === 'accum') accumulateImage(reg, imageData.data, w, h);
   else filterImageData(imageData.data, reg.filters);
   pctx.putImageData(imageData, 0, 0);
+  applyPreviewZoom(pc, previewZoomLevels.get(pc) || 1);
   reg.rt.previewReady = true;
   return true;
 }
@@ -1781,6 +1958,28 @@ function showEmptyLogIfNeeded() {
   }
 }
 
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      console.warn('Clipboard APIでのコピーに失敗。選択コピーを試します:', error);
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  if (!copied) throw new Error('このブラウザーではクリップボードへコピーできません');
+}
+
 function createLogElement(entry) {
   const item = document.createElement('div');
   item.className = 'log-item';
@@ -1795,6 +1994,31 @@ function createLogElement(entry) {
   if (entry.updates) parts.push(`文字送り更新 ×${entry.updates}`);
   meta.textContent = parts.filter(Boolean).join(' ／ ');
 
+  const actions = document.createElement('div');
+  actions.className = 'log-actions';
+
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'log-copy';
+  copy.title = 'OCR結果をクリップボードにコピー';
+  copy.setAttribute('aria-label', 'OCR結果をクリップボードにコピー');
+  copy.textContent = 'コピー';
+  copy.addEventListener('click', async () => {
+    try {
+      await copyTextToClipboard(entry.text || '');
+      copy.textContent = 'コピー済み';
+    } catch (error) {
+      console.error(error);
+      copy.textContent = '失敗';
+    }
+    copy.disabled = true;
+    setTimeout(() => {
+      if (!copy.isConnected) return;
+      copy.textContent = 'コピー';
+      copy.disabled = false;
+    }, 1200);
+  });
+
   const del = document.createElement('button');
   del.type = 'button';
   del.className = 'log-del';
@@ -1803,7 +2027,9 @@ function createLogElement(entry) {
   del.addEventListener('click', () => deleteLogEntry(entry.id));
 
   head.appendChild(meta);
-  head.appendChild(del);
+  actions.appendChild(copy);
+  actions.appendChild(del);
+  head.appendChild(actions);
 
   const body = document.createElement('div');
   body.className = 'log-text' + (entry.text ? '' : ' empty');

@@ -12,9 +12,15 @@
     .bottom-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
     .bottom-row > .panel { flex: 1 1 360px; max-width: 560px; }
     .log-panel { flex: 1 1 300px; min-width: 280px; max-width: 460px; display: flex; flex-direction: column; }
-    #video-wrapper { position: relative; flex: 1 1 420px; min-width: 0; max-width: 800px; border: 2px solid #333; background-color: #000; line-height: 0; }
+    #video-wrapper { position: relative; flex: 1 1 420px; min-width: 0; max-width: 800px; border: 2px solid #333; background-color: #000; line-height: 0; overflow: hidden; }
+    #capture-stage { position: relative; width: 100%; transform: scale(1); transform-origin: center center; }
     #webcam { display: block; width: 100%; height: auto; }
     #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; touch-action: none; }
+    #video-wrapper.is-pan-ready #overlay { cursor: grab !important; }
+    #video-wrapper.is-panning #overlay { cursor: grabbing !important; }
+    #capture-zoom-controls { position: absolute; z-index: 20; top: 8px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 5px; background: rgba(0,0,0,0.72); color: #fff; font: 12px sans-serif; line-height: 1; }
+    #capture-zoom-controls button, .preview-zoom-controls button { width: auto; padding: 4px 8px; font-size: 12px; }
+    #capture-zoom-level { min-width: 42px; text-align: center; }
     .panel { box-sizing: border-box; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .panel h3 { margin: 0 0 10px; font-size: 16px; }
 
@@ -58,12 +64,21 @@
     .del-btn { width: auto; }
     .ref-img { display: block; max-width: 100%; border: 1px solid #ccc; margin-bottom: 6px; background: #ddd; }
     #set-select { width: 100%; padding: 3px; }
-    .preview { display: block; max-width: 100%; height: auto; border: 1px dashed #ccc; min-height: 50px; margin-bottom: 10px; background: #ddd; }
+    .preview-zoom-controls { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; color: #666; }
+    .preview-zoom-controls .preview-zoom-level { min-width: 42px; text-align: center; }
+    .preview-viewport { width: 100%; max-height: 420px; overflow: auto; margin-bottom: 10px; background: #ddd; }
+    .preview-viewport.is-pan-ready { cursor: grab; }
+    .preview-viewport.is-panning { cursor: grabbing; user-select: none; }
+    .preview { display: block; max-width: none; height: auto; border: 1px dashed #ccc; min-height: 50px; background: #ddd; }
 
     #log-list { flex: 1 1 0; min-height: 240px; overflow-y: auto; background: #e9edf2; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
     .log-item { background: #fff; border-radius: 10px; padding: 6px 10px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
     .log-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 3px; }
     .log-meta { font-size: 11px; color: #777; }
+    .log-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+    .log-copy { width: auto; padding: 1px 6px; font-size: 11px; background: transparent; color: #0d6efd; border: 1px solid #0d6efd; border-radius: 4px; cursor: pointer; }
+    .log-copy:hover { background: #0d6efd; color: #fff; }
+    .log-copy:disabled { opacity: 0.7; cursor: default; }
     .log-del { width: auto; padding: 1px 6px; font-size: 11px; background: transparent; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer; flex: none; }
     .log-del:hover { background: #dc3545; color: #fff; }
     .log-text { white-space: pre-wrap; word-break: break-all; font-size: 14px; }
@@ -84,8 +99,17 @@
   <!-- 上段：キャプチャ画面 ＋ OCR結果ログ -->
   <div class="top-row">
     <div id="video-wrapper">
-      <video id="webcam" autoplay playsinline muted></video>
-      <canvas id="overlay"></canvas>
+      <div id="capture-stage">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="capture-zoom-controls" aria-label="キャプチャ画面の拡大縮小">
+        <button type="button" id="capture-zoom-out" aria-label="キャプチャ画面を縮小">−</button>
+        <span id="capture-zoom-level" aria-live="polite">100%</span>
+        <button type="button" id="capture-zoom-in" aria-label="キャプチャ画面を拡大">＋</button>
+        <button type="button" id="capture-zoom-reset">リセット</button>
+        <span>Ctrl＋ホイールでズーム／Ctrl＋ドラッグで移動</span>
+      </div>
     </div>
 
     <div class="panel log-panel">
