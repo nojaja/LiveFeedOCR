@@ -358,7 +358,9 @@ function clampCapturePan() {
 
 function applyCaptureTransform() {
   clampCapturePan();
-  captureStage.style.transform = `translate(${capturePan.x}px, ${capturePan.y}px) scale(${captureZoom})`;
+  captureStage.style.setProperty('--capture-pan-x', `${capturePan.x}px`);
+  captureStage.style.setProperty('--capture-pan-y', `${capturePan.y}px`);
+  captureStage.style.setProperty('--capture-zoom', captureZoom);
 }
 
 function setCaptureZoom(zoom) {
@@ -702,10 +704,10 @@ function detectSettingsHtml(isDetect) {
         </label>` : '';
   const refBlock = isDetect ? `
         <div data-when="det.mode=ref">
-          <p class="note" style="font-size:12px;color:#666;margin:0 0 6px;">基準にしたい画面が映った状態で「現在の画像をリファレンスにする」を押してください。この範囲の画像とリファレンス画像の一致率で判定します。</p>
-          <button type="button" class="sub ref-capture-btn" style="margin-bottom:6px;">現在の画像をリファレンスにする</button>
-          <img class="ref-img" alt="リファレンス画像" style="display:none;">
-          <div class="ref-none" style="font-size:12px;color:#dc3545;margin-bottom:6px;">リファレンス画像が未設定です</div>
+          <p class="note note--small note--compact">基準にしたい画面が映った状態で「現在の画像をリファレンスにする」を押してください。この範囲の画像とリファレンス画像の一致率で判定します。</p>
+          <button type="button" class="sub ref-capture-btn button-gap-bottom">現在の画像をリファレンスにする</button>
+          <img class="ref-img" alt="リファレンス画像" hidden>
+          <div class="ref-none note note--small note--danger">リファレンス画像が未設定です</div>
           <label>一致率しきい値: <span data-val="det.refMatch"></span> %
             <input type="range" data-path="det.refMatch" min="1" max="100" step="1">
           </label>
@@ -732,7 +734,7 @@ function detectSettingsHtml(isDetect) {
         </label>
 
         <div data-when="det.mode=accum">
-          <p class="note" style="font-size:12px;color:#666;margin:0 0 6px;">直近Nフレーム（判定fpsで取得した画像）を2値化して重ね合わせます。背景など変化の激しい部分は白に、動かない文字は黒のまま残る想定です。${isDetect ? '' : '二値化には画像前処理の「二値化しきい値」を使い、重ねた結果画像がプレビュー・変化判定・OCRに使われます。'}</p>
+          <p class="note note--small note--compact">直近Nフレーム（判定fpsで取得した画像）を2値化して重ね合わせます。背景など変化の激しい部分は白に、動かない文字は黒のまま残る想定です。${isDetect ? '' : '二値化には画像前処理の「二値化しきい値」を使い、重ねた結果画像がプレビュー・変化判定・OCRに使われます。'}</p>
           <label>対象フレーム数: <span data-val="det.accumN"></span> frame
             <input type="range" data-path="det.accumN" min="2" max="30" step="1">
           </label>
@@ -775,7 +777,7 @@ function applyVisibility(root, obj) {
     const [path, vals] = el.dataset.when.split('=');
     let v;
     try { v = String(getPath(obj, path)); } catch (e) { v = ''; }
-    el.style.display = vals.split('|').includes(v) ? '' : 'none';
+    el.classList.toggle('is-hidden', !vals.split('|').includes(v));
   });
 }
 
@@ -823,7 +825,7 @@ const previewPanStates = new WeakMap();
 function applyPreviewZoom(canvas, zoom) {
   const viewport = canvas.parentElement;
   const fitWidth = Math.max(1, Math.min(canvas.width, viewport.clientWidth || canvas.width));
-  canvas.style.width = `${fitWidth * zoom}px`;
+  canvas.style.setProperty('--preview-width', `${fitWidth * zoom}px`);
 }
 
 function setPreviewZoom(reg, zoom) {
@@ -883,7 +885,7 @@ function buildOcrCard(reg) {
   card.className = 'panel region-card';
   card.innerHTML = `
     <h3 class="card-title">
-      <span class="swatch" style="background:${regionColor(reg)}"></span>
+      <span class="swatch"></span>
       <span class="rname"></span>
       <button type="button" class="sub del-btn">この範囲を削除</button>
     </h3>
@@ -923,7 +925,7 @@ function buildOcrCard(reg) {
         <label>傾き（この範囲の回転）: <span data-val="angle"></span> °
           <input type="range" data-path="angle" min="-45" max="45" step="0.1">
         </label>
-        <button type="button" class="sub reset-angle" style="margin-bottom:8px;">傾きをリセット</button>
+        <button type="button" class="sub reset-angle button-gap-bottom--large">傾きをリセット</button>
         <label><input type="checkbox" data-path="filters.gray"> グレースケール化</label>
         <label><input type="checkbox" data-path="filters.bin"> 二値化（白黒化）</label>
         <label>二値化しきい値: <span data-val="filters.thr"></span>
@@ -935,8 +937,9 @@ function buildOcrCard(reg) {
 
     ${detectSettingsHtml(false)}
     ${DIFF_HTML}
-    <button type="button" class="exec-btn" style="margin-top:10px;">この範囲を今すぐ読み取る</button>`;
+    <button type="button" class="exec-btn button-gap-top">この範囲を今すぐ読み取る</button>`;
   card.querySelector('.rname').textContent = reg.name;
+  card.querySelector('.card-title .swatch').style.setProperty('--swatch-color', regionColor(reg));
   regionCards.appendChild(card);
   reg.rt.el = collectEl(card);
   reg.rt.el.previewViewport.addEventListener('wheel', event => {
@@ -981,11 +984,11 @@ function updateRefThumb(det) {
   const none = el.card.querySelector('.ref-none');
   if (det.det.refImage) {
     img.src = det.det.refImage;
-    img.style.display = '';
-    none.style.display = 'none';
+    img.hidden = false;
+    none.classList.add('is-hidden');
   } else {
-    img.style.display = 'none';
-    none.style.display = '';
+    img.hidden = true;
+    none.classList.remove('is-hidden');
   }
 }
 
@@ -994,14 +997,15 @@ function buildDetectCard(det) {
   card.className = 'panel region-card';
   card.innerHTML = `
     <h3 class="card-title">
-      <span class="swatch" style="background:${DETECT_COLOR}"></span>
+      <span class="swatch"></span>
       <span class="rname"></span>
       <button type="button" class="sub del-btn">この範囲を削除</button>
     </h3>
-    <p class="note" style="font-size:12px;color:#666;margin:0 0 10px;">この範囲が条件を満たしたら、すべてのOCR範囲の読み取りを実行します。</p>
+    <p class="note note--small note--detect-help">この範囲が条件を満たしたら、すべてのOCR範囲の読み取りを実行します。</p>
     ${detectSettingsHtml(true)}
     ${DIFF_HTML}`;
   card.querySelector('.rname').textContent = det.name;
+  card.querySelector('.card-title .swatch').style.setProperty('--swatch-color', DETECT_COLOR);
   regionCards.appendChild(card);
   det.rt.el = collectEl(card);
 
@@ -1287,7 +1291,7 @@ function setItemState(it, text, color) {
   const el = it.rt.el;
   if (!el) return;
   el.state.textContent = text;
-  el.state.style.color = color || '#333';
+  el.state.style.setProperty('--state-color', color || '#333');
 }
 
 // 指標(変化量/一致率)をバーと数値で表示する
@@ -1296,9 +1300,9 @@ function showMetric(it, label, value, thr, met, scaleMax) {
   if (!el) return;
   const sm = scaleMax || Math.max(thr * 2, 10);
   el.diffText.textContent = `${label}: ${value.toFixed(2)} %（しきい値 ${thr.toFixed(1)} %）`;
-  el.diffFill.style.width = Math.min(100, (value / sm) * 100) + '%';
-  el.diffFill.style.background = met ? '#dc3545' : '#17a2b8';
-  el.diffMark.style.left = Math.min(100, (thr / sm) * 100) + '%';
+  el.diffFill.style.setProperty('--diff-width', `${Math.min(100, (value / sm) * 100)}%`);
+  el.diffFill.style.setProperty('--diff-color', met ? '#dc3545' : '#17a2b8');
+  el.diffMark.style.setProperty('--diff-position', `${Math.min(100, (thr / sm) * 100)}%`);
 }
 
 // 1つの範囲について変化を判定する。「今読み取るべきか」を true/false で返す
@@ -1428,7 +1432,7 @@ function updateDebug() {
 
 function setState(text, color) {
   stateText.textContent = text;
-  stateText.style.color = color || '#333';
+  stateText.style.setProperty('--state-color', color || '#333');
 }
 
 // 判定ループ：指定fpsで「プレビュー更新 → 変化判定」を行う
@@ -1971,8 +1975,7 @@ async function copyTextToClipboard(text) {
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
+  textarea.className = 'clipboard-proxy';
   document.body.appendChild(textarea);
   textarea.select();
   const copied = document.execCommand('copy');

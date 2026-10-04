@@ -24,3 +24,5 @@ PaddleOCR.js SDKはApache-2.0で公開されています。依存パッケージ
 
 - `npm test` — 自動テスト
 - `npm run build` — 本番ビルド
+
+画面のスタイルは `src/styles/main.css` にまとめ、`src/html/main.js` からimportしています。Vite開発サーバーではCSSの変更がHMRで反映されます。

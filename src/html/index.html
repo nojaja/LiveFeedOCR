@@ -4,88 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LiveFeedOCR キャプチャ＆クロップ OCR (変化検知・フィルタ機能付き)</title>
-  <style>
-    body { font-family: sans-serif; margin: 20px; background-color: #f4f6f9; }
-    /* 上段：キャプチャ画面 と OCR結果ログ を横並び（幅が足りない時だけ折り返し） */
-    .top-row { display: flex; gap: 20px; align-items: stretch; flex-wrap: wrap; margin-bottom: 20px; }
-    /* 下段：範囲の指定 と 切り取りプレビュー を横並び */
-    .bottom-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-    .bottom-row > .panel { flex: 1 1 360px; max-width: 560px; }
-    .log-panel { flex: 1 1 300px; min-width: 280px; max-width: 460px; display: flex; flex-direction: column; }
-    #video-wrapper { position: relative; flex: 1 1 420px; min-width: 0; max-width: 800px; border: 2px solid #333; background-color: #000; line-height: 0; overflow: hidden; }
-    #capture-stage { position: relative; width: 100%; transform: scale(1); transform-origin: center center; }
-    #webcam { display: block; width: 100%; height: auto; }
-    #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; touch-action: none; }
-    #video-wrapper.is-pan-ready #overlay { cursor: grab !important; }
-    #video-wrapper.is-panning #overlay { cursor: grabbing !important; }
-    #capture-zoom-controls { position: absolute; z-index: 20; top: 8px; left: 8px; display: flex; align-items: center; gap: 5px; padding: 5px; border-radius: 5px; background: rgba(0,0,0,0.72); color: #fff; font: 12px sans-serif; line-height: 1; }
-    #capture-zoom-controls button, .preview-zoom-controls button { width: auto; padding: 4px 8px; font-size: 12px; }
-    #capture-zoom-level { min-width: 42px; text-align: center; }
-    .panel { box-sizing: border-box; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .panel h3 { margin: 0 0 10px; font-size: 16px; }
-
-    .group { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 12px; border: 1px solid #dee2e6; }
-    .group label { display: block; margin-bottom: 6px; font-size: 14px; }
-    .group input[type="range"] { width: 100%; }
-    .group select { width: 100%; padding: 3px; }
-    .group .note { font-size: 12px; color: #666; margin: 4px 0 0; }
-
-    /* アコーディオン（details/summary） */
-    details.acc { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 12px; }
-    details.acc > summary { cursor: pointer; padding: 8px 10px; font-weight: bold; font-size: 15px; user-select: none; }
-    details.acc[open] > summary { border-bottom: 1px solid #dee2e6; }
-    details.acc .acc-body { padding: 10px; }
-    .acc-body label { display: block; margin-bottom: 6px; font-size: 14px; }
-    .acc-body label:last-child { margin-bottom: 0; }
-    .acc-body input[type="range"] { width: 100%; }
-    .acc-body select { width: 100%; padding: 3px; }
-
-    .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
-    .swatch.ocr { background: #00e676; }
-    .swatch.detect { background: #ff9800; }
-
-    .row { display: flex; gap: 8px; }
-    .row button { flex: 1; }
-    button { padding: 10px 15px; font-size: 16px; cursor: pointer; background-color: #007bff; color: #fff; border: none; border-radius: 4px; width: 100%; }
-    button.sub { background-color: #6c757d; font-size: 13px; padding: 6px 8px; }
-    button:disabled { background-color: #ccc; cursor: not-allowed; }
-
-    #state-text, .item-state { font-weight: bold; font-size: 14px; }
-    .item-diff-text { font-size: 13px; color: #555; margin-top: 4px; }
-    .diff-bar { height: 8px; background: #e9ecef; border-radius: 4px; margin-top: 6px; position: relative; overflow: hidden; }
-    .diff-fill { height: 100%; width: 0; background: #17a2b8; }
-    .diff-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; }
-
-    /* 範囲ごとのカード（OCR範囲は複数、変化検知範囲は1つ）。コンテナ自体は枠を持たず、カードが下段に並ぶ */
-    #region-cards { display: contents; }
-    .region-card { flex: 1 1 360px; max-width: 560px; }
-    .card-title { display: flex; align-items: center; gap: 6px; }
-    .card-title .rname { flex: 1; }
-    .del-btn { width: auto; }
-    .ref-img { display: block; max-width: 100%; border: 1px solid #ccc; margin-bottom: 6px; background: #ddd; }
-    #set-select { width: 100%; padding: 3px; }
-    .preview-zoom-controls { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 12px; color: #666; }
-    .preview-zoom-controls .preview-zoom-level { min-width: 42px; text-align: center; }
-    .preview-viewport { width: 100%; max-height: 420px; overflow: auto; margin-bottom: 10px; background: #ddd; }
-    .preview-viewport.is-pan-ready { cursor: grab; }
-    .preview-viewport.is-panning { cursor: grabbing; user-select: none; }
-    .preview { display: block; max-width: none; height: auto; border: 1px dashed #ccc; min-height: 50px; background: #ddd; }
-
-    #log-list { flex: 1 1 0; min-height: 240px; overflow-y: auto; background: #e9edf2; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
-    .log-item { background: #fff; border-radius: 10px; padding: 6px 10px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
-    .log-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 3px; }
-    .log-meta { font-size: 11px; color: #777; }
-    .log-actions { display: flex; align-items: center; gap: 4px; flex: none; }
-    .log-copy { width: auto; padding: 1px 6px; font-size: 11px; background: transparent; color: #0d6efd; border: 1px solid #0d6efd; border-radius: 4px; cursor: pointer; }
-    .log-copy:hover { background: #0d6efd; color: #fff; }
-    .log-copy:disabled { opacity: 0.7; cursor: default; }
-    .log-del { width: auto; padding: 1px 6px; font-size: 11px; background: transparent; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer; flex: none; }
-    .log-del:hover { background: #dc3545; color: #fff; }
-    .log-text { white-space: pre-wrap; word-break: break-all; font-size: 14px; }
-    .log-text.empty { color: #999; font-style: italic; }
-    .log-empty { color: #888; font-size: 13px; }
-    #progress-text { font-size: 13px; color: #666; margin-top: 8px; text-align: center; }
-  </style>
 </head>
 <body>
 
@@ -113,13 +31,13 @@
     </div>
 
     <div class="panel log-panel">
-      <h3>OCR結果ログ <span id="log-count" style="font-size:12px;color:#666;font-weight:normal;"></span></h3>
+      <h3>OCR結果ログ <span id="log-count" class="log-count"></span></h3>
       <div id="log-list"><div class="log-empty">結果がここに時刻付きで蓄積されます...</div></div>
-      <div class="row" style="margin-top:8px;">
-        <button class="sub" id="csv-btn" style="background-color:#198754;">CSVダウンロード</button>
-        <button class="sub" id="clear-log-btn" style="background-color:#dc3545;">ログを消去</button>
+      <div class="row log-toolbar">
+        <button class="sub button-success" id="csv-btn">CSVダウンロード</button>
+        <button class="sub button-danger" id="clear-log-btn">ログを消去</button>
       </div>
-      <p class="note" style="font-size:12px;color:#666;margin:6px 0 0;">結果はブラウザに自動保存され、再読み込みしても残ります。</p>
+      <p class="note note--small note--log">結果はブラウザに自動保存され、再読み込みしても残ります。</p>
     </div>
   </div>
 
@@ -131,25 +49,25 @@
         <label><input type="radio" name="draw-mode" value="ocr" checked> <span class="swatch ocr"></span>OCR範囲を描く（複数追加できます）</label>
         <label><input type="radio" name="draw-mode" value="detect"> <span class="swatch detect"></span>変化検知範囲を描く（橙・破線／1つだけ）</label>
         <label><input type="radio" name="draw-mode" value="edit"> 範囲の移動とリサイズ</label>
-        <p class="note" style="margin:0 0 8px;">移動とリサイズ：範囲の枠内をドラッグで移動、四隅・四辺の□をドラッグでリサイズできます（OCR範囲は傾きに沿って伸縮）。</p>
+        <p class="note note--edit-help">移動とリサイズ：範囲の枠内をドラッグで移動、四隅・四辺の□をドラッグでリサイズできます（OCR範囲は傾きに沿って伸縮）。</p>
         <p class="note">範囲の削除は、各範囲のカードの「この範囲を削除」ボタンで行います。</p>
       </div>
 
       <div class="group">
-        <b style="font-size:14px;">範囲セット</b>
-        <p class="note" style="margin:2px 0 6px;">OCR範囲すべてと変化検知範囲（各設定込み）を、名前を付けてブラウザに保存できます。</p>
-        <select id="set-select" style="margin-bottom:6px;"></select>
-        <input type="text" id="set-name" placeholder="保存する名前（空なら選択中のセットを上書き）" style="width:100%;box-sizing:border-box;padding:4px;margin-bottom:6px;">
-        <div class="row" style="margin-bottom:6px;">
+        <b class="set-title">範囲セット</b>
+        <p class="note note--set-help">OCR範囲すべてと変化検知範囲（各設定込み）を、名前を付けてブラウザに保存できます。</p>
+        <select id="set-select" class="field-gap-bottom"></select>
+        <input type="text" id="set-name" placeholder="保存する名前（空なら選択中のセットを上書き）">
+        <div class="row set-actions">
           <button class="sub" id="set-save-btn" type="button">セーブ</button>
           <button class="sub" id="set-load-btn" type="button">ロード</button>
-          <button class="sub" id="set-delete-btn" type="button" style="background-color:#dc3545;">削除</button>
+          <button class="sub button-danger" id="set-delete-btn" type="button">削除</button>
         </div>
         <div class="row">
           <button class="sub" id="set-export-btn" type="button">JSONエクスポート</button>
           <button class="sub" id="set-import-btn" type="button">JSONインポート</button>
         </div>
-        <input type="file" id="set-import-file" accept=".json,application/json" style="display:none;">
+        <input type="file" id="set-import-file" accept=".json,application/json">
       </div>
 
       <div class="group">
@@ -174,19 +92,19 @@
       <details class="acc">
         <summary>NDLOCR-Lite モデルの読み込み</summary>
         <div class="acc-body">
-          <p class="note" style="font-size:12px;color:#666;margin:0 0 6px;">
+          <p class="note note--small note--compact">
             NDLOCR-Lite（国立国会図書館）の <b>PARSeq の onnx（30／50／100文字用）</b> と文字セット <b>NDLmoji.yaml</b> を選択してください（複数選択可）。
             ブラウザ（IndexedDB）に保存され、再読み込み後も使えます。使う範囲のカードで「OCRエンジン」を NDLOCR-Lite にしてください。
           </p>
-          <input type="file" id="ndl-files" multiple accept=".onnx,.yaml,.yml,.txt" style="width:100%;margin-bottom:6px;">
-          <div id="ndl-status" style="font-size:12px;color:#444;white-space:pre-wrap;word-break:break-all;margin-bottom:6px;">読み込み状況を確認中...</div>
-          <button class="sub" id="ndl-clear-btn" type="button" style="background-color:#dc3545;">保存済みモデルを削除</button>
+          <input type="file" id="ndl-files" class="file-input" multiple accept=".onnx,.yaml,.yml,.txt">
+          <div id="ndl-status">読み込み状況を確認中...</div>
+          <button class="sub button-danger" id="ndl-clear-btn" type="button">保存済みモデルを削除</button>
         </div>
       </details>
 
       <div id="state-text">script.js を読み込み中...</div>
       <div id="progress-text"></div>
-      <div id="debug-text" style="font-size:11px;color:#888;margin-top:6px;word-break:break-all;">script.js 未実行（古いファイルを読んでいる可能性）</div>
+      <div id="debug-text">script.js 未実行（古いファイルを読んでいる可能性）</div>
     </div>
 
     <!-- 範囲ごとのカードがここに追加されます -->
