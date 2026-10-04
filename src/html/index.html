@@ -3,57 +3,134 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LiveFeedOCR キャプチャ＆クロップ OCR (フィルタ機能付き)</title>
+  <title>LiveFeedOCR キャプチャ＆クロップ OCR (変化検知・フィルタ機能付き)</title>
   <style>
     body { font-family: sans-serif; margin: 20px; background-color: #f4f6f9; }
-    .container { display: flex; gap: 20px; align-items: flex-start; }
-    #video-wrapper { position: relative; display: inline-block; border: 2px solid #333; background-color: #000; }
+    .container { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+    #video-wrapper { position: relative; display: inline-block; border: 2px solid #333; background-color: #000; line-height: 0; }
     #webcam { display: block; max-width: 800px; width: 100%; height: auto; }
-    #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; }
-    .panel { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 350px; }
+    #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; touch-action: none; }
+    .side { display: flex; flex-direction: column; gap: 15px; width: 360px; }
+    .panel { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .panel h3 { margin: 0 0 10px; font-size: 16px; }
     #preview-img { max-width: 100%; border: 1px dashed #ccc; min-height: 50px; margin-bottom: 10px; background: #ddd; }
-    
-    .filter-group { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #dee2e6; }
-    .filter-group label { display: block; margin-bottom: 5px; font-size: 14px; }
-    .filter-group input[type="range"] { width: 100%; }
-    
+
+    .group { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 12px; border: 1px solid #dee2e6; }
+    .group label { display: block; margin-bottom: 6px; font-size: 14px; }
+    .group input[type="range"] { width: 100%; }
+    .group select { width: 100%; padding: 3px; }
+    .group .note { font-size: 12px; color: #666; margin: 4px 0 0; }
+
+    .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+    .swatch.ocr { background: #00e676; }
+    .swatch.detect { background: #ff9800; }
+
+    .row { display: flex; gap: 8px; }
+    .row button { flex: 1; }
     button { padding: 10px 15px; font-size: 16px; cursor: pointer; background-color: #007bff; color: #fff; border: none; border-radius: 4px; width: 100%; }
+    button.sub { background-color: #6c757d; font-size: 13px; padding: 6px 8px; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
-    #result-text { margin-top: 15px; padding: 10px; background: #eee; white-space: pre-wrap; min-height: 100px; border: 1px solid #ccc; }
+
+    #state-text { font-weight: bold; font-size: 14px; }
+    #diff-text { font-size: 13px; color: #555; margin-top: 4px; }
+    #diff-bar { height: 8px; background: #e9ecef; border-radius: 4px; margin-top: 6px; position: relative; overflow: hidden; }
+    #diff-fill { height: 100%; width: 0; background: #17a2b8; }
+    #diff-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; }
+
+    #result-meta { font-size: 12px; color: #666; margin-bottom: 4px; }
+    #result-text { padding: 10px; background: #eee; white-space: pre-wrap; min-height: 100px; border: 1px solid #ccc; }
     #progress-text { font-size: 13px; color: #666; margin-top: 8px; text-align: center; }
   </style>
 </head>
 <body>
 
-  <h2>LiveFeedOCR 画面キャプチャ＆画像フィルタOCR</h2>
-  <p>映像上でドラッグして切り抜き、右側のパネルで文字がクッキリ見えるように調整してください。</p>
+  <h2>LiveFeedOCR 画面キャプチャ＆画像フィルタOCR（変化検知つき）</h2>
+  <p>
+    映像上でドラッグして範囲を指定します。右の「範囲の指定」で <b>OCR範囲</b> と <b>変化検知範囲</b> を切り替えて設定してください。
+    変化検知範囲の内容が一定以上変化し、落ち着いたタイミングで自動的にOCRを実行します。
+  </p>
 
   <div class="container">
     <!-- 左側：映像表示と選択エリア -->
     <div id="video-wrapper">
-      <video id="webcam" autoplay playsinline></video>
+      <video id="webcam" autoplay playsinline muted></video>
       <canvas id="overlay"></canvas>
     </div>
 
-    <!-- 右側：プレビュー、フィルタ操作、OCR結果 -->
-    <div class="panel">
-      <h3>切り取りプレビュー</h3>
-      <img id="preview-img" src="" alt="ここに切り取られた画像が表示されます">
-      
-      <!-- 画像前処理（フィルタ）コントロール -->
-      <div class="filter-group">
-        <label><input type="checkbox" id="filter-grayscale" checked> グレースケール化</label>
-        <label><input type="checkbox" id="filter-binarize" checked> 二値化（白黒化）</label>
-        <label>二値化しきい値: <span id="threshold-val">128</span>
-          <input type="range" id="slider-threshold" min="0" max="255" value="128">
-        </label>
-        <label><input type="checkbox" id="filter-invert"> 白黒反転（ネガポジ）</label>
+    <div class="side">
+      <!-- 範囲指定・変化検知設定 -->
+      <div class="panel">
+        <h3>範囲の指定</h3>
+        <div class="group">
+          <label><input type="radio" name="draw-mode" value="ocr" checked> <span class="swatch ocr"></span>OCR範囲を描く（緑・実線）</label>
+          <label><input type="radio" name="draw-mode" value="detect"> <span class="swatch detect"></span>変化検知範囲を描く（橙・破線）</label>
+          <div class="row">
+            <button class="sub" id="clear-ocr-btn">OCR範囲を解除</button>
+            <button class="sub" id="clear-detect-btn">検知範囲を解除</button>
+          </div>
+          <p class="note">変化検知範囲が未設定の場合は、OCR範囲そのものを変化判定に使います。</p>
+        </div>
+
+        <h3>変化検知の設定</h3>
+        <div class="group">
+          <label><input type="checkbox" id="auto-ocr" checked> 変化があったら自動でOCRする</label>
+          <label>判定fps（1秒あたりの確認回数）
+            <select id="check-fps">
+              <option value="1">1 fps</option>
+              <option value="2">2 fps</option>
+              <option value="5" selected>5 fps</option>
+              <option value="10">10 fps</option>
+              <option value="15">15 fps</option>
+            </select>
+          </label>
+          <label>変化量しきい値: <span id="change-thr-val">3.0</span> %（画素の何%が変わったらOCRするか）
+            <input type="range" id="change-thr" min="0.2" max="30" step="0.2" value="3">
+          </label>
+          <label>画素の差しきい値: <span id="pixel-thr-val">30</span>（0〜255。小さいほど敏感・ノイズに弱い）
+            <input type="range" id="pixel-thr" min="5" max="120" step="1" value="30">
+          </label>
+          <label>安定待ち時間: <span id="stable-ms-val">500</span> ms（変化が止まってからOCRするまでの待ち）
+            <input type="range" id="stable-ms" min="0" max="3000" step="100" value="500">
+          </label>
+        </div>
+
+        <div id="state-text">待機中</div>
+        <div id="diff-text">変化量: -</div>
+        <div id="diff-bar"><div id="diff-fill"></div><div id="diff-mark"></div></div>
       </div>
 
-      <button id="exec-btn" disabled>ブラウザでOCRを実行</button>
-      
-      <h3>OCR結果</h3>
-      <div id="result-text">結果がここに表示されます...</div>
+      <!-- プレビュー、フィルタ操作、OCR結果 -->
+      <div class="panel">
+        <h3>切り取りプレビュー</h3>
+        <img id="preview-img" src="" alt="OCR実行時の切り取り画像（フィルタ適用後）がここに表示されます">
+
+        <!-- 画像前処理（フィルタ）コントロール -->
+        <div class="group">
+          <label><input type="checkbox" id="filter-grayscale" checked> グレースケール化</label>
+          <label><input type="checkbox" id="filter-binarize" checked> 二値化（白黒化）</label>
+          <label>二値化しきい値: <span id="threshold-val">128</span>
+            <input type="range" id="slider-threshold" min="0" max="255" value="128">
+          </label>
+          <label><input type="checkbox" id="filter-invert"> 白黒反転（ネガポジ）</label>
+        </div>
+
+        <div class="group">
+          <label>OCR言語
+            <select id="ocr-lang">
+              <option value="jpn" selected>日本語 (jpn)</option>
+              <option value="jpn+eng">日本語＋英語 (jpn+eng)</option>
+              <option value="eng">英語 (eng)</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="exec-btn" disabled>今すぐOCRを実行</button>
+        <div id="progress-text"></div>
+
+        <h3 style="margin-top:15px;">OCR結果</h3>
+        <div id="result-meta"></div>
+        <div id="result-text">結果がここに表示されます...</div>
+      </div>
     </div>
   </div>
 
