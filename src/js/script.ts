@@ -2,6 +2,13 @@
 import { normalizePaddleOcrResult } from './ocr-providers.ts';
 import { adjustZoom, clampPanOffset, mapPointToZoomedContent } from './zoom.ts';
 
+export function startScreenController() {
+const lifecycle = new AbortController();
+let cameraStream = null;
+let resizeObserver = null;
+let monitorTimer = null;
+let monitorActive = true;
+
 // ===== 要素 =====
 const SCRIPT_VERSION = 'v6';
 const debugText = document.getElementById('debug-text');
@@ -305,8 +312,14 @@ async function initCamera() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
+    if (!monitorActive) {
+      stream.getTracks().forEach(track => track.stop());
+      return;
+    }
+    cameraStream = stream;
     video.srcObject = stream;
   } catch (err) {
+    if (!monitorActive) return;
     alert("カメラアクセスエラー。localhost経由で開いているか確認してください。");
     console.error(err);
   }
@@ -319,8 +332,11 @@ function resizeOverlay() {
   redraw();
 }
 video.addEventListener('loadedmetadata', resizeOverlay);
-window.addEventListener('resize', resizeOverlay);
-if (window.ResizeObserver) new ResizeObserver(resizeOverlay).observe(video);
+window.addEventListener('resize', resizeOverlay, { signal: lifecycle.signal });
+if (window.ResizeObserver) {
+  resizeObserver = new ResizeObserver(resizeOverlay);
+  resizeObserver.observe(video);
+}
 
 // ===== 2. 範囲指定（マウス/タッチ） =====
 let isDrawing = false;
@@ -341,16 +357,16 @@ document.addEventListener('keydown', event => {
   if (event.key !== 'Control' || controlPressed) return;
   controlPressed = true;
   refreshPanCursors();
-});
+}, { signal: lifecycle.signal });
 document.addEventListener('keyup', event => {
   if (event.key !== 'Control') return;
   controlPressed = false;
   refreshPanCursors();
-});
+}, { signal: lifecycle.signal });
 window.addEventListener('blur', () => {
   controlPressed = false;
   refreshPanCursors();
-});
+}, { signal: lifecycle.signal });
 
 function clampCapturePan() {
   capturePan.x = clampPanOffset(videoWrapper.clientWidth, captureStage.offsetWidth, captureZoom, capturePan.x);
@@ -1438,8 +1454,9 @@ function setState(text, color) {
 
 // 判定ループ：指定fpsで「プレビュー更新 → 変化判定」を行う
 function monitorTick() {
+  if (!monitorActive) return;
   const fps = parseInt(checkFps.value, 10) || 5;
-  setTimeout(monitorTick, 1000 / fps);
+  monitorTimer = setTimeout(monitorTick, 1000 / fps);
   try {
     monitorStep();
   } catch (err) {
@@ -2147,3 +2164,21 @@ loadNdlFilesFromDb();
 redraw();
 initCamera();
 monitorTick();
+
+return () => {
+  if (!monitorActive) return;
+  monitorActive = false;
+  clearTimeout(monitorTimer);
+  lifecycle.abort();
+  resizeObserver?.disconnect();
+  video.pause();
+  video.srcObject = null;
+  cameraStream?.getTracks().forEach(track => track.stop());
+  cameraStream = null;
+  if (worker) {
+    void worker.terminate().catch(err => console.warn('OCRワーカーの終了に失敗:', err));
+    worker = null;
+    workerLang = null;
+  }
+};
+}

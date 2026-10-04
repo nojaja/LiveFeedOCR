@@ -1,2 +1,5 @@
 import '../styles/main.css';
-import '../js/script.ts';
+import { createApp } from 'vue';
+import App from '../App.vue';
+
+createApp(App).mount('#app');
