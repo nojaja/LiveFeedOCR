@@ -6,20 +6,33 @@
   <title>LiveFeedOCR キャプチャ＆クロップ OCR (変化検知・フィルタ機能付き)</title>
   <style>
     body { font-family: sans-serif; margin: 20px; background-color: #f4f6f9; }
-    .container { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-    #video-wrapper { position: relative; display: inline-block; border: 2px solid #333; background-color: #000; line-height: 0; }
-    #webcam { display: block; max-width: 800px; width: 100%; height: auto; }
+    /* 上段：キャプチャ画面 と OCR結果ログ を横並び（幅が足りない時だけ折り返し） */
+    .top-row { display: flex; gap: 20px; align-items: stretch; flex-wrap: wrap; margin-bottom: 20px; }
+    /* 下段：範囲の指定 と 切り取りプレビュー を横並び */
+    .bottom-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+    .bottom-row > .panel { flex: 1 1 360px; max-width: 560px; }
+    .log-panel { flex: 1 1 300px; min-width: 280px; max-width: 460px; display: flex; flex-direction: column; }
+    #video-wrapper { position: relative; flex: 1 1 420px; min-width: 0; max-width: 800px; border: 2px solid #333; background-color: #000; line-height: 0; }
+    #webcam { display: block; width: 100%; height: auto; }
     #overlay { position: absolute; top: 0; left: 0; cursor: crosshair; z-index: 10; touch-action: none; }
-    .side { display: flex; flex-direction: column; gap: 15px; width: 360px; }
-    .panel { background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .panel { box-sizing: border-box; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .panel h3 { margin: 0 0 10px; font-size: 16px; }
-    #preview-img { max-width: 100%; border: 1px dashed #ccc; min-height: 50px; margin-bottom: 10px; background: #ddd; }
 
     .group { background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 12px; border: 1px solid #dee2e6; }
     .group label { display: block; margin-bottom: 6px; font-size: 14px; }
     .group input[type="range"] { width: 100%; }
     .group select { width: 100%; padding: 3px; }
     .group .note { font-size: 12px; color: #666; margin: 4px 0 0; }
+
+    /* アコーディオン（details/summary） */
+    details.acc { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 12px; }
+    details.acc > summary { cursor: pointer; padding: 8px 10px; font-weight: bold; font-size: 15px; user-select: none; }
+    details.acc[open] > summary { border-bottom: 1px solid #dee2e6; }
+    details.acc .acc-body { padding: 10px; }
+    .acc-body label { display: block; margin-bottom: 6px; font-size: 14px; }
+    .acc-body label:last-child { margin-bottom: 0; }
+    .acc-body input[type="range"] { width: 100%; }
+    .acc-body select { width: 100%; padding: 3px; }
 
     .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
     .swatch.ocr { background: #00e676; }
@@ -31,15 +44,26 @@
     button.sub { background-color: #6c757d; font-size: 13px; padding: 6px 8px; }
     button:disabled { background-color: #ccc; cursor: not-allowed; }
 
-    #state-text { font-weight: bold; font-size: 14px; }
-    #diff-text { font-size: 13px; color: #555; margin-top: 4px; }
-    #diff-bar { height: 8px; background: #e9ecef; border-radius: 4px; margin-top: 6px; position: relative; overflow: hidden; }
-    #diff-fill { height: 100%; width: 0; background: #17a2b8; }
-    #diff-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; }
+    #state-text, .item-state { font-weight: bold; font-size: 14px; }
+    .item-diff-text { font-size: 13px; color: #555; margin-top: 4px; }
+    .diff-bar { height: 8px; background: #e9ecef; border-radius: 4px; margin-top: 6px; position: relative; overflow: hidden; }
+    .diff-fill { height: 100%; width: 0; background: #17a2b8; }
+    .diff-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; }
 
-    #log-list { height: 320px; overflow-y: auto; background: #e9edf2; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
+    /* 範囲ごとのカード（OCR範囲は複数、変化検知範囲は1つ）。コンテナ自体は枠を持たず、カードが下段に並ぶ */
+    #region-cards { display: contents; }
+    .region-card { flex: 1 1 360px; max-width: 560px; }
+    .card-title { display: flex; align-items: center; gap: 6px; }
+    .card-title .rname { flex: 1; }
+    .del-btn { width: auto; }
+    .preview { display: block; max-width: 100%; height: auto; border: 1px dashed #ccc; min-height: 50px; margin-bottom: 10px; background: #ddd; }
+
+    #log-list { flex: 1 1 0; min-height: 240px; overflow-y: auto; background: #e9edf2; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
     .log-item { background: #fff; border-radius: 10px; padding: 6px 10px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
-    .log-meta { font-size: 11px; color: #777; margin-bottom: 3px; }
+    .log-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 3px; }
+    .log-meta { font-size: 11px; color: #777; }
+    .log-del { width: auto; padding: 1px 6px; font-size: 11px; background: transparent; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer; flex: none; }
+    .log-del:hover { background: #dc3545; color: #fff; }
     .log-text { white-space: pre-wrap; word-break: break-all; font-size: 14px; }
     .log-text.empty { color: #999; font-style: italic; }
     .log-empty { color: #888; font-size: 13px; }
@@ -50,97 +74,66 @@
 
   <h2>LiveFeedOCR 画面キャプチャ＆画像フィルタOCR（変化検知つき）</h2>
   <p>
-    映像上でドラッグして範囲を指定します。右の「範囲の指定」で <b>OCR範囲</b> と <b>変化検知範囲</b> を切り替えて設定してください。
-    変化検知範囲の内容が一定以上変化し、落ち着いたタイミングで自動的にOCRを実行します。
+    映像上でドラッグして範囲を指定します。<b>OCR範囲</b> は複数描けて、それぞれが切り取りプレビュー・画像前処理・変化検知の設定を持ちます。
+    <b>変化検知範囲</b> が変化したときは、すべてのOCR範囲をまとめてOCRします。範囲や画像前処理の設定はブラウザに自動保存されます。
   </p>
 
-  <div class="container">
-    <!-- 左側：映像表示と選択エリア -->
+  <!-- 上段：キャプチャ画面 ＋ OCR結果ログ -->
+  <div class="top-row">
     <div id="video-wrapper">
       <video id="webcam" autoplay playsinline muted></video>
       <canvas id="overlay"></canvas>
     </div>
 
-    <div class="side">
-      <!-- 範囲指定・変化検知設定 -->
-      <div class="panel">
-        <h3>範囲の指定</h3>
-        <div class="group">
-          <label><input type="radio" name="draw-mode" value="ocr" checked> <span class="swatch ocr"></span>OCR範囲を描く（緑・実線）</label>
-          <label><input type="radio" name="draw-mode" value="detect"> <span class="swatch detect"></span>変化検知範囲を描く（橙・破線）</label>
-          <div class="row">
-            <button class="sub" id="clear-ocr-btn">OCR範囲を解除</button>
-            <button class="sub" id="clear-detect-btn">検知範囲を解除</button>
-          </div>
-          <p class="note">変化検知範囲が未設定の場合は、OCR範囲そのものを変化判定に使います。</p>
-        </div>
-
-        <h3>変化検知の設定</h3>
-        <div class="group">
-          <label><input type="checkbox" id="auto-ocr" checked> 変化があったら自動でOCRする</label>
-          <label>判定fps（1秒あたりの確認回数）
-            <select id="check-fps">
-              <option value="1">1 fps</option>
-              <option value="2">2 fps</option>
-              <option value="5" selected>5 fps</option>
-              <option value="10">10 fps</option>
-              <option value="15">15 fps</option>
-            </select>
-          </label>
-          <label>変化量しきい値: <span id="change-thr-val">3.0</span> %（画素の何%が変わったらOCRするか）
-            <input type="range" id="change-thr" min="0.2" max="30" step="0.2" value="3">
-          </label>
-          <label>画素の差しきい値: <span id="pixel-thr-val">30</span>（0〜255。小さいほど敏感・ノイズに弱い）
-            <input type="range" id="pixel-thr" min="5" max="120" step="1" value="30">
-          </label>
-          <label>安定待ち時間: <span id="stable-ms-val">500</span> ms（変化が止まってからOCRするまでの待ち）
-            <input type="range" id="stable-ms" min="0" max="3000" step="100" value="500">
-          </label>
-        </div>
-
-        <div id="state-text">script.js を読み込み中...</div>
-        <div id="diff-text">変化量: -</div>
-        <div id="debug-text" style="font-size:11px;color:#888;margin-top:6px;word-break:break-all;">script.js 未実行（古いファイルを読んでいる可能性）</div>
-        <div id="diff-bar"><div id="diff-fill"></div><div id="diff-mark"></div></div>
+    <div class="panel log-panel">
+      <h3>OCR結果ログ <span id="log-count" style="font-size:12px;color:#666;font-weight:normal;"></span></h3>
+      <div id="log-list"><div class="log-empty">結果がここに時刻付きで蓄積されます...</div></div>
+      <div class="row" style="margin-top:8px;">
+        <button class="sub" id="csv-btn" style="background-color:#198754;">CSVダウンロード</button>
+        <button class="sub" id="clear-log-btn" style="background-color:#dc3545;">ログを消去</button>
       </div>
-
-      <!-- プレビュー、フィルタ操作、OCR結果 -->
-      <div class="panel">
-        <h3>切り取りプレビュー</h3>
-        <img id="preview-img" src="" alt="OCR実行時の切り取り画像（フィルタ適用後）がここに表示されます">
-
-        <!-- 画像前処理（フィルタ）コントロール -->
-        <div class="group">
-          <label><input type="checkbox" id="filter-grayscale" checked> グレースケール化</label>
-          <label><input type="checkbox" id="filter-binarize" checked> 二値化（白黒化）</label>
-          <label>二値化しきい値: <span id="threshold-val">128</span>
-            <input type="range" id="slider-threshold" min="0" max="255" value="128">
-          </label>
-          <label><input type="checkbox" id="filter-invert"> 白黒反転（ネガポジ）</label>
-        </div>
-
-        <div class="group">
-          <label>OCR言語
-            <select id="ocr-lang">
-              <option value="jpn" selected>日本語 (jpn)</option>
-              <option value="jpn+eng">日本語＋英語 (jpn+eng)</option>
-              <option value="eng">英語 (eng)</option>
-            </select>
-          </label>
-        </div>
-
-        <button id="exec-btn" disabled>今すぐOCRを実行</button>
-        <div id="progress-text"></div>
-
-        <h3 style="margin-top:15px;">OCR結果ログ <span id="log-count" style="font-size:12px;color:#666;font-weight:normal;"></span></h3>
-        <div id="log-list"><div class="log-empty">結果がここに時刻付きで蓄積されます...</div></div>
-        <div class="row" style="margin-top:8px;">
-          <button class="sub" id="csv-btn" style="background-color:#198754;">CSVダウンロード</button>
-          <button class="sub" id="clear-log-btn" style="background-color:#dc3545;">ログを消去</button>
-        </div>
-        <p class="note" style="font-size:12px;color:#666;margin:6px 0 0;">結果はブラウザに自動保存され、再読み込みしても残ります。</p>
-      </div>
+      <p class="note" style="font-size:12px;color:#666;margin:6px 0 0;">結果はブラウザに自動保存され、再読み込みしても残ります。</p>
     </div>
+  </div>
+
+  <!-- 下段：範囲の指定 ＋ 範囲ごとのカード（切り取りプレビュー・画像前処理・変化検知の設定） -->
+  <div class="bottom-row">
+    <div class="panel">
+      <h3>範囲の指定</h3>
+      <div class="group">
+        <label><input type="radio" name="draw-mode" value="ocr" checked> <span class="swatch ocr"></span>OCR範囲を描く（複数追加できます）</label>
+        <label><input type="radio" name="draw-mode" value="detect"> <span class="swatch detect"></span>変化検知範囲を描く（橙・破線／1つだけ）</label>
+        <label><input type="radio" name="draw-mode" value="edit"> 範囲の移動とリサイズ</label>
+        <p class="note" style="margin:0 0 8px;">移動とリサイズ：範囲の枠内をドラッグで移動、四隅・四辺の□をドラッグでリサイズできます（OCR範囲は傾きに沿って伸縮）。</p>
+        <p class="note">範囲の削除は、各範囲のカードの「この範囲を削除」ボタンで行います。</p>
+      </div>
+
+      <div class="group">
+        <label>判定fps（1秒あたりの確認回数・すべての範囲で共通。プレビューも同じ頻度で更新）
+          <select id="check-fps">
+            <option value="1">1 fps</option>
+            <option value="2">2 fps</option>
+            <option value="5" selected>5 fps</option>
+            <option value="10">10 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+        </label>
+        <label>OCR言語
+          <select id="ocr-lang">
+            <option value="jpn" selected>日本語 (jpn)</option>
+            <option value="jpn+eng">日本語＋英語 (jpn+eng)</option>
+            <option value="eng">英語 (eng)</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="state-text">script.js を読み込み中...</div>
+      <div id="progress-text"></div>
+      <div id="debug-text" style="font-size:11px;color:#888;margin-top:6px;word-break:break-all;">script.js 未実行（古いファイルを読んでいる可能性）</div>
+    </div>
+
+    <!-- 範囲ごとのカードがここに追加されます -->
+    <div id="region-cards"></div>
   </div>
 
   <!-- JavaScriptの読み込み -->
