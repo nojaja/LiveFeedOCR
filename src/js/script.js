@@ -1,8 +1,9 @@
+
 const video = document.getElementById('webcam');
 const overlay = document.getElementById('overlay');
 const ctx = overlay.getContext('2d');
 const previewImg = document.getElementById('preview-img');
-const sendBtn = document.getElementById('send-btn');
+const execBtn = document.getElementById('exec-btn');
 const resultText = document.getElementById('result-text');
 
 // フィルタUIの要素
@@ -89,7 +90,7 @@ function cropOriginalImage() {
   
   // 切り出しが完了したら、現在のフィルタ設定を適用する
   applyFilters();
-  sendBtn.disabled = false;
+  execBtn.disabled = false;
 }
 
 // 4. 画像前処理（フィルタ適用）
@@ -165,26 +166,39 @@ filterBinarize.addEventListener('change', applyFilters);
 sliderThreshold.addEventListener('input', applyFilters);
 filterInvert.addEventListener('change', applyFilters);
 
-// 5. Node.jsサーバーへ送信
-sendBtn.addEventListener('click', async () => {
+// 5. ブラウザ上でOCRを実行 (Tesseract.jsを使用)
+execBtn.addEventListener('click', async () => {
   if (!currentCroppedBase64) return;
-  sendBtn.disabled = true;
-  sendBtn.innerText = 'OCR処理中...';
-  resultText.innerText = '処理中...';
+  
+  execBtn.disabled = true;
+  resultText.innerText = 'OCRエンジンを準備中... (初回は言語データのダウンロードに数秒かかります)';
 
   try {
-    const response = await fetch('/api/ocr', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: currentCroppedBase64 })
-    });
-    const data = await response.json();
-    resultText.innerText = data.success ? (data.text || 'テキストが見つかりません') : ('エラー: ' + data.error);
+    // Tesseract.js の認識処理
+    const result = await Tesseract.recognize(
+      currentCroppedBase64,
+      'jpn', // 日本語を指定。英語も含む場合は 'jpn+eng'
+      {
+        // 進捗状況を画面に表示する
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            resultText.innerText = `文字を認識中... ${Math.round(m.progress * 100)}%`;
+          } else {
+            resultText.innerText = `準備中: ${m.status}...`;
+          }
+        }
+      }
+    );
+    
+    // 結果のテキストを表示
+    resultText.innerText = result.data.text || '（テキストが検出されませんでした）';
+    
   } catch (err) {
-    resultText.innerText = '通信エラー';
+    console.error(err);
+    resultText.innerText = 'OCR処理中にエラーが発生しました。';
   } finally {
-    sendBtn.disabled = false;
-    sendBtn.innerText = 'この状態の画像をOCRに送信';
+    execBtn.disabled = false;
+    execBtn.innerText = 'この画像から文字を読み取る';
   }
 });
 
