@@ -80,7 +80,7 @@ export function createWorkspace(services: WorkspaceServices = browserServices) {
   }
 
   const editor = useRegionEditor({
-    regions, viewport, video: elements.video, overlay: elements.overlay, dialogs: services.dialogs,
+    regions, viewport, wrapper: elements.wrapper, video: elements.video, overlay: elements.overlay, dialogs: services.dialogs,
     onGeometryChanged: reg => source.refreshPreview(reg),
     onGeometryCommitted: () => { /* 保存は自動保存が行う */ },
   });

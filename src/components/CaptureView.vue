@@ -16,16 +16,16 @@ const { cursor } = editor;
   >
     <div id="capture-stage" :ref="(el) => (elements.stage.value = el as HTMLElement | null)" :style="stageStyle">
       <video id="webcam" :ref="(el) => (elements.video.value = el as HTMLVideoElement | null)" autoplay playsinline muted></video>
-      <canvas
-        id="overlay"
-        :ref="(el) => (elements.overlay.value = el as HTMLCanvasElement | null)"
-        :style="{ cursor }"
-        @pointerdown="editor.onPointerDown"
-        @pointermove="editor.onPointerMove"
-        @pointerup="editor.onPointerUp"
-        @pointercancel="editor.onPointerCancel"
-      ></canvas>
     </div>
+    <canvas
+      id="overlay"
+      :ref="(el) => (elements.overlay.value = el as HTMLCanvasElement | null)"
+      :style="{ cursor }"
+      @pointerdown="editor.onPointerDown"
+      @pointermove="editor.onPointerMove"
+      @pointerup="editor.onPointerUp"
+      @pointercancel="editor.onPointerCancel"
+    ></canvas>
     <ZoomControls
       id="capture-zoom-controls"
       id-prefix="capture-zoom"

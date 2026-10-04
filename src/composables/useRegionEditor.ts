@@ -14,6 +14,7 @@ export type DrawMode = 'ocr' | 'detect' | 'edit';
 export interface RegionEditorOptions {
   regions: RegionsStore;
   viewport: CaptureViewport;
+  wrapper: Ref<HTMLElement | null>;
   video: Ref<HTMLVideoElement | null>;
   overlay: Ref<HTMLCanvasElement | null>;
   dialogs: Dialogs;
@@ -23,7 +24,7 @@ export interface RegionEditorOptions {
 
 // オーバーレイ上での範囲の描画・移動・リサイズ
 export function useRegionEditor(opts: RegionEditorOptions) {
-  const { regions, viewport, video, overlay, dialogs } = opts;
+  const { regions, viewport, wrapper, video, overlay, dialogs } = opts;
   const drawMode = ref<DrawMode>('ocr');
   const cursor = ref('crosshair');
   const overlaySize = ref({ width: 0, height: 0 });
@@ -34,22 +35,26 @@ export function useRegionEditor(opts: RegionEditorOptions) {
   const size = () => ({ width: overlay.value?.width || 0, height: overlay.value?.height || 0 });
 
   function resizeOverlay() {
-    const v = video.value, o = overlay.value;
-    if (!v || !o) return;
-    o.width = v.clientWidth;
-    o.height = v.clientHeight;
+    const host = wrapper.value, o = overlay.value;
+    if (!host || !o) return;
+    o.width = host.clientWidth;
+    o.height = host.clientHeight;
     overlaySize.value = { width: o.width, height: o.height };
     viewport.refresh();
   }
 
-  // 範囲・モード・描画中の枠のいずれかが変わるたびに描き直す
+  // 範囲・モード・描画中の枠・ズーム・パンが変わるたびに描き直す
   watchEffect(() => {
     const o = overlay.value;
     const ctx = o?.getContext('2d');
     if (!ctx) return;
     const s = overlaySize.value;
+    const { zoom, panX, panY } = viewport.view;
     renderOverlay(ctx, {
       size: s,
+      zoom,
+      panX,
+      panY,
       detect: regions.detectRegion.value,
       ocr: regions.ocrRegions.value,
       showHandles: drawMode.value === 'edit',
@@ -143,9 +148,9 @@ export function useRegionEditor(opts: RegionEditorOptions) {
   onMounted(() => {
     video.value?.addEventListener('loadedmetadata', resizeOverlay);
     window.addEventListener('resize', resizeOverlay);
-    if (window.ResizeObserver && video.value) {
+    if (window.ResizeObserver && wrapper.value) {
       resizeObserver = new ResizeObserver(resizeOverlay);
-      resizeObserver.observe(video.value);
+      resizeObserver.observe(wrapper.value);
     }
     resizeOverlay();
   });
