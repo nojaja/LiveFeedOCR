@@ -1,11 +1,15 @@
 // ===== 要素 =====
+const SCRIPT_VERSION = 'v2';
+const debugText = document.getElementById('debug-text');
 const video = document.getElementById('webcam');
 const overlay = document.getElementById('overlay');
 const ctx = overlay.getContext('2d');
 const previewImg = document.getElementById('preview-img');
 const execBtn = document.getElementById('exec-btn');
-const resultText = document.getElementById('result-text');
-const resultMeta = document.getElementById('result-meta');
+const logList = document.getElementById('log-list');
+const logCount = document.getElementById('log-count');
+const csvBtn = document.getElementById('csv-btn');
+const clearLogBtn = document.getElementById('clear-log-btn');
 const progressText = document.getElementById('progress-text');
 
 // フィルタUIの要素
@@ -271,8 +275,12 @@ const sampleCanvas = document.createElement('canvas');
 const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
 const SAMPLE_BASE = 160;
 
+let sampleError = '';
+
 function sampleGray(region) {
-  if (!video.videoWidth || video.readyState < 2) return null;
+  sampleError = '';
+  if (!video.srcObject) { sampleError = '映像ソースが未接続（カメラ許可を確認）'; return null; }
+  if (!video.videoWidth) { sampleError = '映像サイズが取得できません（videoWidth=0）'; return null; }
 
   const sx = region.x * video.videoWidth;
   const sy = region.y * video.videoHeight;
@@ -286,8 +294,14 @@ function sampleGray(region) {
 
   sampleCanvas.width = w;
   sampleCanvas.height = h;
-  sampleCtx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
-  const px = sampleCtx.getImageData(0, 0, w, h).data;
+  let px;
+  try {
+    sampleCtx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+    px = sampleCtx.getImageData(0, 0, w, h).data;
+  } catch (err) {
+    sampleError = '映像の読み取りに失敗: ' + err.message;
+    return null;
+  }
 
   const gray = new Uint8Array(w * h);
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
@@ -308,6 +322,14 @@ function diffRatio(a, b) {
   return (count / n) * 100;
 }
 
+function updateDebug() {
+  if (!debugText) return;
+  const src = regions.detect ? '検知範囲' : (regions.ocr ? 'OCR範囲(代用)' : '未設定');
+  debugText.textContent =
+    `script ${SCRIPT_VERSION} ／ 映像 ${video.videoWidth}x${video.videoHeight} readyState=${video.readyState}` +
+    ` ／ 判定対象: ${src} ／ Tesseract: ${typeof Tesseract !== 'undefined' ? 'OK' : '未読込'}`;
+}
+
 function setState(text, color) {
   stateText.textContent = text;
   stateText.style.color = color || '#333';
@@ -326,12 +348,22 @@ function showDiff(ratio) {
 function monitorTick() {
   const fps = parseInt(checkFps.value, 10) || 5;
   setTimeout(monitorTick, 1000 / fps);
+  try {
+    monitorStep();
+  } catch (err) {
+    console.error(err);
+    setState('判定処理でエラー: ' + err.message, '#dc3545');
+  }
+}
 
+function monitorStep() {
+
+  updateDebug();
   const region = regions.detect || regions.ocr;
   if (!region) { setState('範囲が未設定です（映像上でドラッグしてください）'); return; }
 
   const cur = sampleGray(region);
-  if (!cur) return;
+  if (!cur) { setState('映像を取得できません: ' + sampleError, '#dc3545'); updateDebug(); return; }
 
   const now = performance.now();
 
@@ -387,6 +419,7 @@ let worker = null;
 let workerLang = null;
 
 async function getWorker(lang) {
+  if (typeof Tesseract === 'undefined') throw new Error('Tesseract.js が読み込まれていません（ネット接続を確認）');
   if (worker && workerLang === lang) return worker;
   if (worker) { await worker.terminate(); worker = null; }
 
@@ -419,13 +452,11 @@ async function runOcr(reason) {
   try {
     const w = await getWorker(ocrLang.value);
     const result = await w.recognize(dataUrl);
-    resultText.innerText = result.data.text.trim() || '（テキストが検出されませんでした）';
-    resultMeta.textContent = `${new Date().toLocaleTimeString()} ／ ${reason}`;
+    addLogEntry(result.data.text.trim(), reason);
     progressText.textContent = '完了';
   } catch (err) {
     console.error(err);
-    resultText.innerText = 'OCR処理中にエラーが発生しました。';
-    progressText.textContent = '';
+    progressText.textContent = 'OCR処理中にエラーが発生しました: ' + err.message;
   } finally {
     ocrRunning = false;
     updateButtons();
@@ -445,6 +476,120 @@ execBtn.addEventListener('click', () => {
 function updateButtons() {
   execBtn.disabled = ocrRunning || !regions.ocr;
 }
+
+// ===== 7. OCR結果ログ（チャット形式表示・自動保存・CSV出力） =====
+const LOG_KEY = 'ocrResultLogV1';
+let ocrLog = [];   // { time: ミリ秒, reason: 実行理由, text: 認識結果 }
+
+try {
+  ocrLog = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+  if (!Array.isArray(ocrLog)) ocrLog = [];
+} catch (err) {
+  console.warn('ログの読み込みに失敗:', err);
+  ocrLog = [];
+}
+
+function saveLog() {
+  try {
+    localStorage.setItem(LOG_KEY, JSON.stringify(ocrLog));
+  } catch (err) {
+    console.warn('ログの保存に失敗:', err);
+  }
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function formatTime(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+         `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function createLogElement(entry) {
+  const item = document.createElement('div');
+  item.className = 'log-item';
+
+  const meta = document.createElement('div');
+  meta.className = 'log-meta';
+  meta.textContent = `${formatTime(entry.time)} ／ ${entry.reason}`;
+
+  const body = document.createElement('div');
+  body.className = 'log-text' + (entry.text ? '' : ' empty');
+  body.textContent = entry.text || '（テキストが検出されませんでした）';
+
+  item.appendChild(meta);
+  item.appendChild(body);
+  return item;
+}
+
+function updateLogCount() {
+  logCount.textContent = ocrLog.length ? `（${ocrLog.length}件）` : '';
+}
+
+function renderLog() {
+  logList.innerHTML = '';
+  if (ocrLog.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'log-empty';
+    empty.textContent = '結果がここに時刻付きで蓄積されます...';
+    logList.appendChild(empty);
+  } else {
+    ocrLog.forEach(e => logList.appendChild(createLogElement(e)));
+    logList.scrollTop = logList.scrollHeight;
+  }
+  updateLogCount();
+}
+
+function addLogEntry(text, reason) {
+  const entry = { time: Date.now(), reason, text };
+  ocrLog.push(entry);
+  saveLog();
+
+  // 空状態の表示を消してから追記し、最新が見えるよう最下部へスクロール
+  const empty = logList.querySelector('.log-empty');
+  if (empty) empty.remove();
+  logList.appendChild(createLogElement(entry));
+  logList.scrollTop = logList.scrollHeight;
+  updateLogCount();
+}
+
+function csvEscape(value) {
+  return '"' + String(value).replace(/"/g, '""') + '"';
+}
+
+function downloadCsv() {
+  if (ocrLog.length === 0) {
+    alert('保存されたOCR結果がありません。');
+    return;
+  }
+  const lines = ['日時,実行理由,認識結果'];
+  ocrLog.forEach(e => {
+    lines.push([formatTime(e.time), e.reason, e.text].map(csvEscape).join(','));
+  });
+  // 先頭にBOMを付けてExcelでも日本語が文字化けしないようにする
+  const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  a.href = url;
+  a.download = `ocr_results_${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}_` +
+               `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+csvBtn.addEventListener('click', downloadCsv);
+clearLogBtn.addEventListener('click', () => {
+  if (ocrLog.length === 0) return;
+  if (!confirm(`保存済みのOCR結果 ${ocrLog.length} 件をすべて消去します。よろしいですか？\n（必要ならCSVを先にダウンロードしてください）`)) return;
+  ocrLog = [];
+  saveLog();
+  renderLog();
+});
+
+renderLog();
 
 // ===== スライダー表示の更新 =====
 changeThr.addEventListener('input', () => { changeThrVal.textContent = parseFloat(changeThr.value).toFixed(1); });

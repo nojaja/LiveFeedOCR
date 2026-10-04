@@ -37,8 +37,12 @@
     #diff-fill { height: 100%; width: 0; background: #17a2b8; }
     #diff-mark { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc3545; }
 
-    #result-meta { font-size: 12px; color: #666; margin-bottom: 4px; }
-    #result-text { padding: 10px; background: #eee; white-space: pre-wrap; min-height: 100px; border: 1px solid #ccc; }
+    #log-list { height: 320px; overflow-y: auto; background: #e9edf2; border: 1px solid #ccc; border-radius: 6px; padding: 8px; }
+    .log-item { background: #fff; border-radius: 10px; padding: 6px 10px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+    .log-meta { font-size: 11px; color: #777; margin-bottom: 3px; }
+    .log-text { white-space: pre-wrap; word-break: break-all; font-size: 14px; }
+    .log-text.empty { color: #999; font-style: italic; }
+    .log-empty { color: #888; font-size: 13px; }
     #progress-text { font-size: 13px; color: #666; margin-top: 8px; text-align: center; }
   </style>
 </head>
@@ -94,8 +98,9 @@
           </label>
         </div>
 
-        <div id="state-text">待機中</div>
+        <div id="state-text">script.js を読み込み中...</div>
         <div id="diff-text">変化量: -</div>
+        <div id="debug-text" style="font-size:11px;color:#888;margin-top:6px;word-break:break-all;">script.js 未実行（古いファイルを読んでいる可能性）</div>
         <div id="diff-bar"><div id="diff-fill"></div><div id="diff-mark"></div></div>
       </div>
 
@@ -127,9 +132,13 @@
         <button id="exec-btn" disabled>今すぐOCRを実行</button>
         <div id="progress-text"></div>
 
-        <h3 style="margin-top:15px;">OCR結果</h3>
-        <div id="result-meta"></div>
-        <div id="result-text">結果がここに表示されます...</div>
+        <h3 style="margin-top:15px;">OCR結果ログ <span id="log-count" style="font-size:12px;color:#666;font-weight:normal;"></span></h3>
+        <div id="log-list"><div class="log-empty">結果がここに時刻付きで蓄積されます...</div></div>
+        <div class="row" style="margin-top:8px;">
+          <button class="sub" id="csv-btn" style="background-color:#198754;">CSVダウンロード</button>
+          <button class="sub" id="clear-log-btn" style="background-color:#dc3545;">ログを消去</button>
+        </div>
+        <p class="note" style="font-size:12px;color:#666;margin:6px 0 0;">結果はブラウザに自動保存され、再読み込みしても残ります。</p>
       </div>
     </div>
   </div>
