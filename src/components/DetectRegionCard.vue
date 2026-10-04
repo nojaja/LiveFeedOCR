@@ -5,6 +5,7 @@ import { useWorkspace } from '../composables/useWorkspace.ts';
 import type { DetectView } from '../composables/useRegions.ts';
 import DetectionSettingsSection from './region/DetectionSettingsSection.vue';
 import ItemStatus from './region/ItemStatus.vue';
+import RegionNameEditor from './region/RegionNameEditor.vue';
 
 const props = defineProps<{ region: DetectView }>();
 const { regions, actions } = useWorkspace();
@@ -22,7 +23,7 @@ watch(
   <div class="panel region-card">
     <h3 class="card-title">
       <span class="swatch" :style="{ '--swatch-color': DETECT_COLOR }"></span>
-      <span class="rname">{{ region.name }}</span>
+      <RegionNameEditor v-model:name="region.name" />
       <button type="button" class="sub del-btn" @click="regions.removeDetect()">この範囲を削除</button>
     </h3>
     <p class="note note--small note--detect-help">この範囲が条件を満たしたら、すべてのOCR範囲の読み取りを実行します。</p>

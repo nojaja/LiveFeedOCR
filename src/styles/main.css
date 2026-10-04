@@ -267,7 +267,17 @@ button:disabled {
 #region-cards { display: contents; }
 .region-card { flex: 1 1 360px; max-width: 560px; }
 .card-title { display: flex; align-items: center; gap: 6px; }
-.card-title .rname { flex: 1; }
+.card-title .rname-editor { flex: 1; min-width: 0; }
+.card-title .rname { cursor: text; }
+.card-title .rname-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--primary);
+  border-radius: 3px;
+  font: inherit;
+}
 .del-btn { width: auto; }
 .ref-img {
   display: block;

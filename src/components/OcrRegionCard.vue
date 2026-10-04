@@ -8,6 +8,7 @@ import FilterSettingsSection from './region/FilterSettingsSection.vue';
 import ItemStatus from './region/ItemStatus.vue';
 import PreviewPane from './region/PreviewPane.vue';
 import ReadSettingsSection from './region/ReadSettingsSection.vue';
+import RegionNameEditor from './region/RegionNameEditor.vue';
 
 const props = defineProps<{ region: OcrView }>();
 const { regions, actions } = useWorkspace();
@@ -27,7 +28,7 @@ watch(
   <div class="panel region-card">
     <h3 class="card-title">
       <span class="swatch" :style="{ '--swatch-color': regionColor(region) }"></span>
-      <span class="rname">{{ region.name }}</span>
+      <RegionNameEditor v-model:name="region.name" />
       <button type="button" class="sub del-btn" @click="regions.removeOcr(region)">この範囲を削除</button>
     </h3>
     <PreviewPane :region="region" />
