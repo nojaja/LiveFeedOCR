@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue';
 const workspaceRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
+  base: './',
   plugins: [vue()],
   server: {
     fs: {
