@@ -1,5 +1,6 @@
-import { normalizePaddleOcrResult } from './ocr-providers.js';
-import { adjustZoom, clampPanOffset, mapPointToZoomedContent } from './zoom.js';
+// @ts-nocheck
+import { normalizePaddleOcrResult } from './ocr-providers.ts';
+import { adjustZoom, clampPanOffset, mapPointToZoomedContent } from './zoom.ts';
 
 // ===== 要素 =====
 const SCRIPT_VERSION = 'v6';

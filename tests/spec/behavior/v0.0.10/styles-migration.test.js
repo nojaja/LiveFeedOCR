@@ -8,7 +8,7 @@ const readProjectFile = (path) => readFile(new URL(path, projectRoot), 'utf8');
 test('HTMLはインラインCSSを持たず、Viteエントリーからsrc/stylesのCSSを読み込む', async () => {
   const [html, entry] = await Promise.all([
     readProjectFile('src/html/index.html'),
-    readProjectFile('src/html/main.js'),
+    readProjectFile('src/html/main.ts'),
   ]);
 
   assert.doesNotMatch(html, /<style\b/i);
@@ -17,6 +17,6 @@ test('HTMLはインラインCSSを持たず、Viteエントリーからsrc/style
 });
 
 test('JavaScriptが生成するUIテンプレートにインラインstyle属性を含めない', async () => {
-  const script = await readProjectFile('src/js/script.js');
+  const script = await readProjectFile('src/js/script.ts');
   assert.doesNotMatch(script, /\sstyle\s*=/i);
 });

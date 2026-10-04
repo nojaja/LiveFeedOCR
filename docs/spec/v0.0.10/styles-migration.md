@@ -17,7 +17,7 @@ HTML 内のスタイル定義を `src/styles` に移し、Vite のモジュー�
 - ブラウザー内処理、設定保存形式、OCR/APIに変更を加えない。
 
 ## インターフェース
-`src/html/main.js`から`src/styles/main.css`を副作用importし、HTMLは既存のモジュールエントリーを維持する。アプリのJavaScriptからCSSへ渡す動的値はCSSカスタムプロパティ、表示切替はクラスで表す。
+`src/html/main.ts`から`src/styles/main.css`を副作用importし、HTMLは既存のモジュールエントリーを維持する。アプリのJavaScriptからCSSへ渡す動的値はCSSカスタムプロパティ、表示切替はクラスで表す。
 
 ## 互換性・移行
 データ形式や公開APIの変更はなく、保存済み設定の移行も不要。Vite開発サーバーおよび本番ビルドを継続利用する。

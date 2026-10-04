@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite src/html --host 0.0.0.0",
     "build": "vite build src/html --outDir ../../dist",
-    "test": "node --test"
+    "test": "node --test --experimental-strip-types",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@paddleocr/paddleocr-js": "0.4.2",
     "onnxruntime-web": "1.24.3"
   },
   "devDependencies": {
+    "typescript": "^5.9.2",
     "vite": "^6.4.3"
   }
 }

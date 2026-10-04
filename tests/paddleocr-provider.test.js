@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePaddleOcrResult } from '../src/js/ocr-providers.js';
+import { normalizePaddleOcrResult } from '../src/js/ocr-providers.ts';
 
 test('PaddleOCRの複数行を表示順に改行で連結する', () => {
   assert.equal(normalizePaddleOcrResult({ items: [{ text: '先頭行' }, { text: '次の行' }] }), '先頭行\n次の行');
